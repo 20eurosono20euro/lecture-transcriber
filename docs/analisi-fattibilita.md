@@ -605,3 +605,8 @@ aggiungere superficie di bug.
   progetto (§3.1). Non e' un limite tecnico: e' una scelta deliberata.
 - **Riprocessamento con GPU whisper.cpp**: possibile ma richiede Mesa 25.x
   e la ricostruzione di whisper.cpp; resta un upgrade.
+- **Streaming italiano ufficiale (Nemotron 3.5 ASR Streaming 0.6B)**:
+  candidato emerso dal deep-research (INT8 ONNX per sherpa-onnx, WER FLEURS
+  it 5,23 % @80 ms secondo la scheda) — **da misurare** su questa macchina
+  (test 10 della roadmap) prima di decidere se aggiungerlo come provvisorio.
+  Vedi research/risultati-consolidati-2026-10-29.md.

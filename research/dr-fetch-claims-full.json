@@ -1,0 +1,512 @@
+[
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "The `ConfigureShortcuts` method (GlobalShortcuts rebinding/configuration) was first added to xdg-desktop-portal in version 1.21.0, released 2026-01-21 (upstream PR #1661) — so any portal implementation capped at 1.20.x (the generation shipped with GNOME 50's xdg-desktop-portal-gnome) cannot expose this API at all; it requires a portal 1.21.0+ backend.",
+    "importance": "central",
+    "quote": "\"Changes in 1.21.0\" / \"Released: 2026-01-21\" / \"New Features:\" / \"Add the `ConfigureShortcuts` method to the Global Shortcuts Portal (#1661)\""
+   },
+   {
+    "claim": "xdg-desktop-portal 1.22.0 was released 2026-06-08 and shipped only two bug fixes (Dynamic Launcher Portal icon GVariant, Document Portal path resolving) — it introduces no new portal methods, no GlobalShortcuts changes, and no text-injection or typing API, so upgrading to 1.22 does not change the capabilities available to a Wayland/GNOME transcription app.",
+    "importance": "central",
+    "quote": "\"Changes in 1.22.0\" / \"Released: 2026-06-08\" / \"Bug Fixes:\" / \"Correct passing icon GVariant around in the Dynamic Launcher Portal (#2006)\" / \"Improve Document Portal document path resolving for the File Chooser and OpenURI Portals (#2004)\""
+   },
+   {
+    "claim": "The org.freedesktop.portal.InputCapture portal is scoped to seizing control of input devices for KVM-style remote-display control (InputLeap/Synergy), not to injecting typed text into the focused application; upstream describes it as a device-control mechanism with no typing/text-inspection role, so it cannot serve as a text-injection API.",
+    "importance": "central",
+    "quote": "\"Introduce a new Input Capture portal. This portal adds mechanisms for taking control of input devices. The primary usage model is centered around the InputLeap and Synergy use cases, where local devices are used to control remote displays.\""
+   },
+   {
+    "claim": "As of portal 1.21.0 an application must present a valid AppID to use the Global Shortcuts portal, and empty shortcut binding lists previously crashed the daemon — meaning a Flatpak/sandboxed build must ship with a correct app ID and a non-empty shortcut list to bind global hotkeys reliably.",
+    "importance": "supporting",
+    "quote": "\"Require a valid AppID from apps to use the Global Shortcuts Portal (#1817)\" / \"Fix a crash when calling `GlobalShortcuts.BindShortcuts` with an empty list (#1732)\""
+   },
+   {
+    "claim": "The Global Shortcuts portal (introduced in portal 1.16.0) provides registration and receipt of keyboard shortcuts for unfocused applications, and upstream explicitly framed it as an incomplete first implementation with further improvements pending — it is not a mechanism for injecting text into another application's focused text field.",
+    "importance": "supporting",
+    "quote": "\"Introduce the Global Shortcuts portal. This portal allows applications to register and receive keyboard shortcuts even when they're not focused. This was a highly requested feature, especially on Wayland desktops. There are improvements to come, but portal backends can now implement this new portal.\""
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "As of the page state retrieved in October 2026, xdg-desktop-portal has NO portal for UI automation / synthetic keyboard input / text injection into the focused application: the official upstream request \"Add UI automation portal\" (flatpak/xdg-desktop-portal issue #565, opened 2021-02-25 by Jmgr) is still in state \"Open\", carries the label \"new portals\" whose description reads \"This requires creating a new portal interface\", and has no linked pull request, milestone or assignee.",
+    "importance": "central",
+    "quote": "Add UI automation portal — issue #565 ... \"This requires creating a new portal interface\" ... State shown: \"Open\" ... No linked pull requests, branches, assignee, milestone, or relationships are shown."
+   },
+   {
+    "claim": "The two existing related official portals, RemoteDesktop and ScreenCast, are explicitly stated by the issue author to be insufficient for automation (they do not provide the full set of required features such as keyboard event synthesis, window listing, and getting/setting the foreground window), i.e. there is no existing portal API that an app can use to inject text into the focused application.",
+    "importance": "central",
+    "quote": "I know there is `RemoteDesktop` and `ScreenCast`, ... but their use-case is a bit different and they don't provide all the required features."
+   },
+   {
+    "claim": "xdg-desktop-portal collaborator swick states that the libei/emulated-input route cannot be used to deliver arbitrary text, because an emulated keyboard has no notion of a keymap — ruling out InputCapture/EIS-based devices as a substitute for a text-injection API.",
+    "importance": "supporting",
+    "quote": "Similarly an emulated keyboard can't give you specific text because it has no concept of a keymap."
+   },
+   {
+    "claim": "Collaborator whot (xdg-desktop-portal maintainer) confirmed on 2023-09-26 that libei provides no portal-level policy: the API would still have to be added to xdg-desktop-portal itself, and that libei is only a transport layer. Separately, swick's original framing that libei is unrelated to UI automation was corrected (libei keyboards can be assigned a keymap by the EIS implementation, and absolute devices support Regions including the libei 1.1 region mapping id), so libei is a transport that would still require a portal API.",
+    "importance": "supporting",
+    "quote": "but it's true that libei itself is just a transport layer, most of the decisions would have to be part of the portal API."
+   },
+   {
+    "claim": "The alternative route floated in the thread for programmatic injection is the accessibility stack rather than a portal, described by orowith2os on 2023-09-08 as a path that already works; the same thread links the gap to the unresolved KeePassXC Wayland autotyping problem, i.e. Wayland desktop apps currently lack a supported way to type into the focused/unfocused window.",
+    "importance": "supporting",
+    "quote": "Another path to take is abusing future accessibility stuff for automation, which I think already works. ... This would also help to resolve the keepassxc issue with autotyping on wayland"
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "The InputCapture portal is a capture-only interface: the only path by which input reaches an application is a one-way (\"passive\") libei file descriptor obtained via ConnectToEIS, and the reference document defines no method that generates, synthesizes, injects or simulates keystrokes — the strings \"typing\", \"keystroke\", \"inject\", \"synthesize\" and \"simulate\" do not occur anywhere in it. The complete public method set is CreateSession/CreateSession2, Start, GetZones, SetPointerBarriers, Enable, Disable, Release and ConnectToEIS, all of which manage the capture session lifecycle rather than produce input. Therefore the portal can never be used for typing/text injection into the focused application.",
+    "importance": "central",
+    "quote": "A file descriptor to an active EIS implementation that can be passed to a passive libei context"
+   },
+   {
+    "claim": "Input data in the InputCapture portal flows strictly from the compositor's real input devices to the application (device -> app); the portal only intercepts events that would otherwise update the on-screen pointer, and never originates them. The interface is explicitly scoped as \"Portal for permitting input capture\" and is documented as \"This documentation describes version 2 of this interface.\"",
+    "importance": "central",
+    "quote": "Once the compositor activates input capturing, events from physical or logical devices are sent directly to the application instead of being used to update the pointer position on-screen."
+   },
+   {
+    "claim": "The compositor retains unconditional authority over the InputCapture portal and may filter or terminate capture at any time; an application cannot unilaterally drive capture. Capture is trigger-based, and the only defined trigger is pointer barriers (horizontal or vertical lines at screen-zone edges crossed by the cursor) — so the portal offers no mechanism for an app to start capture on its own schedule (e.g. to read text typed into a focused window).",
+    "importance": "central",
+    "quote": "The compositor is always in control of input capturing and may filter events or stop capturing at any time."
+   },
+   {
+    "claim": "InputCapture cannot be triggered immediately even if requested: the reference states outright that no application-initiated immediate capture exists, and separately notes that even when a capability is granted there is no guarantee that a corresponding device is currently present or will ever trigger capture. The SupportedCapabilities bitmask (1=KEYBOARD, 2=POINTER, 4=TOUCHSCREEN) describes what the portal implements, not what devices are available.",
+    "importance": "supporting",
+    "quote": "There is currently no way for an application to activate immediate input capture."
+   },
+   {
+    "claim": "The documented InputCapture interface is at version 2 as of the current upstream reference, with CreateSession2, Start, the restore_token option and the persist_mode option (0 = do not persist, 1 = application lifetime, 2 = until revoked) all added in version 2, and the original CreateSession deprecated in version 2. Per upstream xdg-desktop-portal release notes, the version-2 features (clipboard support, session persistence) shipped in release 1.21.1, so version 2 is already present in the 1.22 series relevant to GNOME 50 / xdg-desktop-portal 1.22.",
+    "importance": "supporting",
+    "quote": "This method was deprecated in version 2 of this interface"
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "The official xdg-desktop-portal GlobalShortcuts interface is currently at version 2, and the user-facing shortcut-rebinding method ConfigureShortcuts was introduced in version 2 of that interface — i.e. the API spec already carries it, and the GNOME 50 vs 51 question is a backend-implementation question, not an API-availability question. Verified on the target machine: the upstream GNOME backend's gnome-50 branch (meson 50.1) still calls `xdp_impl_global_shortcuts_set_version(global_shortcuts, 1)` and contains zero references to ConfigureShortcuts, while upstream main (meson 51.1) sets version 2 and connects `handle-configure-shortcuts`; locally the live `org.freedesktop.portal.GlobalShortcuts` `version` property reads 1 and a live ConfigureShortcuts call returns `org.freedesktop.DBus.Error.UnknownMethod: Method ConfigureShortcuts is not implemented on interface org.freedesktop.portal.GlobalShortcuts`, so ConfigureShortcuts rebinding is GNOME 51+, NOT available on GNOME 50 / mutter 50.6 even with xdg-desktop-portal 1.22.1 installed.",
+    "importance": "central",
+    "quote": "This documentation describes version 2 of this interface. ... This method was added in version 2 of this interface."
+   },
+   {
+    "claim": "ConfigureShortcuts is a fire-and-forget call with no request handle and no response value — it takes only session_handle, parent_window and options{activation_token}, so an application cannot learn the user's chosen rebinding from the call itself and must instead observe the separate ShortcutsChanged signal to discover new triggers.",
+    "importance": "central",
+    "quote": "ConfigureShortcuts (IN session_handle o, IN parent_window s, IN options a{sv}) ... Request showing a configuration UI so the user is able to configure all shortcuts of this session."
+   },
+   {
+    "claim": "The portal exposes a readable `version` property as the interface-capability negotiation mechanism; this is precisely how a client detects whether ConfigureShortcuts (version 2) is implemented by the running backend, which on GNOME 50 always reads 1.",
+    "importance": "supporting",
+    "quote": "Property: \"version readable u\""
+   },
+   {
+    "claim": "An application may bind shortcuts to a session only once, so a desktop app that wants to re-bind after a user rebinds must create a new session rather than calling BindShortcuts again — a constraint on how a Flatpak app can implement a \"change hotkey\" flow.",
+    "importance": "supporting",
+    "quote": "An application can only attempt to bind shortcuts of a session once."
+   },
+   {
+    "claim": "The GlobalShortcuts interface is scoped strictly to shortcut management — its complete documented surface is a version property, four methods (CreateSession, BindShortcuts, ListShortcuts, ConfigureShortcuts) and three lifecycle signals (Activated, Deactivated, ShortcutsChanged) — and provides no portal API for typing or injecting text into the focused application, confirming the portal route cannot deliver the 'controlled text insertion into the focused app' requirement.",
+    "importance": "supporting",
+    "quote": "Portal for managing global shortcuts ... These shortcuts are activated regardless of the focused state of the application window."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "Handy is a fully offline (no-cloud) speech-to-text desktop app for Windows/macOS/Linux, MIT-licensed, with ~34.3k stars/3.3k forks and an actively maintained 2026 release cadence (v0.9.8 published 2026-10-03, following v0.9.7 on 2026-09-18 and v0.9.6 on 2026-08-24) — so it qualifies as an existing, live 2026 offline Linux transcription application.",
+    "importance": "central",
+    "quote": "A free, open source, and extensible speech-to-text application that works completely offline. ... This happens on your own computer without sending any information to the cloud."
+   },
+   {
+    "claim": "Handy does NOT do real-time/streaming transcription: audio is captured live but transcription is performed only after the recording stops, with no partial or streaming transcript output, so it cannot satisfy a true real-time partial-transcript requirement.",
+    "importance": "central",
+    "quote": "Press a configurable keyboard shortcut: hold it to record and release to stop, or tap it to toggle recording on and off ... Speak your words while the shortcut is active ... Release and Handy processes your speech using Whisper"
+   },
+   {
+    "claim": "On Wayland Handy provides no global-shortcut registration of its own: the user must bind a system-level shortcut through the desktop environment or window manager (GNOME Settings -> Keyboard -> Custom Shortcuts) to the CLI command `handy --toggle-transcription`, i.e. shortcut handling is delegated to the DE/WM rather than done in-app.",
+    "importance": "central",
+    "quote": "On Wayland, system-level shortcuts must be configured through your desktop environment or window manager. ... Set the Command to `handy --toggle-transcription`"
+   },
+   {
+    "claim": "Handy's text insertion into the focused application is implemented by shelling out to external typing utilities (xdotool on X11; wtype or dotool on Wayland; ydotool on Ubuntu 26.04), with an enigo fallback of limited Wayland compatibility — meaning insertion depends on external uinput/X11 helper binaries rather than any portal API, and the app additionally bundles a \"Reliable Paste (Beta)\" clipboard-timing workaround.",
+    "importance": "central",
+    "quote": "Wayland: Install `wtype` (preferred) or `dotool` for text input to work correctly ... Without these tools, Handy falls back to enigo which may have limited compatibility, especially on Wayland."
+   },
+   {
+    "claim": "Handy's floating overlay is implemented with gtk-layer-shell (runtime-linked; Fedora/RHEL dependency installed via `sudo dnf install gtk-layer-shell`), is disabled by default on Linux via Overlay Position: None, and falls back to a plain always-on-top window when layer-shell init is disabled with HANDY_NO_GTK_LAYER_SHELL; the AppImage packaging is X11-only (0.9.6 forces X11), and the repo documents no Flatpak or Snap packaging and no PipeWire/system-audio capture path.",
+    "importance": "supporting",
+    "quote": "Handy uses `gtk-layer-shell` for its recording overlay and links against it at runtime. ... With this variable set, the overlay falls back to a regular always-on-top window: ... Fedora/RHEL | `gtk-layer-shell` | `sudo dnf install gtk-layer-shell` ... This workaround does not work with the 0.9.6 AppImage, which forces X11."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "The GNOME 50 backend of xdg-desktop-portal-gnome exports the GlobalShortcuts portal at implementation version 1, and the version-2 line was only introduced later on main (branch meson.build declares version: '51.1'). The gnome-50 branch contains exactly three handler registrations on the global_shortcuts object — bind, create-session, list — and no ConfigureShortcuts handler.",
+    "importance": "central",
+    "quote": "xdp_impl_global_shortcuts_set_version (global_shortcuts, 1);\n\n  g_signal_connect (global_shortcuts, \"handle-bind-shortcuts\", G_CALLBACK (handle_bind_shortcuts), NULL);\n  g_signal_connect (global_shortcuts, \"handle-create-session\", G_CALLBACK (handle_create_session), NULL);\n  g_signal_connect (global_shortcuts, \"handle-list-shortcuts\", G_CALLBACK (handle_list_shortcuts), NULL);"
+   },
+   {
+    "claim": "The ConfigureShortcuts (version 2) support was added on main by commit b104d4db, 'globalshortcuts: Support ConfigureShortcuts if GNOME Settings does', by Toni Spets on 2026-07-03 (MR 264). The commit changed the version from 1 to 2, added the D-Bus ConfigureShortcuts method to the interface XML, and added handle_configure_shortcuts, which forwards to org_gnome_settings_global_shortcuts_provider_call_configure_shortcuts. This commit is NOT present on the gnome-50 branch.",
+    "importance": "central",
+    "quote": "xdp_impl_global_shortcuts_set_version (global_shortcuts, 2);\n...\n  g_signal_connect (global_shortcuts, \"handle-configure-shortcuts\", G_CALLBACK (handle_configure_shortcuts), NULL);"
+   },
+   {
+    "claim": "The ConfigureShortcuts method is part of the upstream org.freedesktop.portal.GlobalShortcuts standard interface at version 2, and was introduced upstream in xdg-desktop-portal 1.21.0 (upstream commit a78b5b393, 2025-03-11, 'GlobalShortcuts: Add a request to configure shortcuts'). It is present in 1.21.0, 1.21.2, 1.22.0 and 1.22.1, but absent from 1.20.x and earlier, where the interface documents version 1. So on a GNOME 50 host running xdg-desktop-portal 1.22, the wire protocol has ConfigureShortcuts but the GNOME 50 backend refuses it by exporting version 1.",
+    "importance": "central",
+    "quote": "<method name=\"ConfigureShortcuts\">\n      <arg type=\"o\" name=\"session_handle\" direction=\"in\"/>\n      <arg type=\"s\" name=\"parent_window\" direction=\"in\" />\n      <annotation name=\"org.qtproject.QtDBus.QtTypeName.In2\" value=\"QVariantMap\"/>\n      <arg type=\"a{sv}\" name=\"options\" direction=\"in\"/>\n    </method>"
+   },
+   {
+    "claim": "GNOME's GlobalShortcuts backend does not itself implement rebinding of shortcut accelerators from the standard portal API; it delegates to GNOME Settings over a private D-Bus interface org.gnome.GlobalShortcutsProvider (with a separate org.gnome.GlobalShortcutsRebind interface exported at /org/gnome/globalshortcuts that 'Propagates GlobalShortcuts changes which are requested by user, to the compositor and active clients'). This private provider interface is identical on the gnome-50 and main branches, so it is not the differentiator between versions 1 and 2.",
+    "importance": "supporting",
+    "quote": "<interface name=\"org.gnome.GlobalShortcutsRebind\">\n    <!--\n      @short_description: Global shortcuts portal rebind service\n\n      Propagates GlobalShortcuts changes which are requested by user, to the compositor and active clients.\n    -->"
+   },
+   {
+    "claim": "The GNOME InputCapture portal declares a keyboard capability (value 1) but delivers no keyboard data: the implementation contains no keycode, keystroke, keypress or keyval handling, and the Activated signal payload carries only activation_id, cursor_position and barrier_id. Therefore the InputCapture portal cannot be used to observe or replay typed text and cannot serve as a text-injection mechanism.",
+    "importance": "supporting",
+    "quote": "INPUT_CAPTURE_CAPABILITY_KEYBOARD = 1,\n...\n  g_variant_builder_add (&options_builder, \"{sv}\",\n                         \"barrier_id\", g_variant_new_uint32 (barrier_info->id));\n\n  emit_session_signal (input_capture_session,\n                       \"Activated\",\n                       \"(oa{sv})\","
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "Whishper is a self-hosted BROWSER WEB UI served from a Docker stack at http://localhost:8082 — not a native Linux desktop application — so it provides none of the required desktop-integration features (floating always-on-top translucent window, click-through, global shortcuts, or controlled text insertion into the focused app). The documented feature set is upload-a-file / transcribe-from-URL / translate / edit subtitles / export TXT-JSON-VTT-SRT, and installation is Docker + a bash script (get-whishper.sh) plus Nginx, MongoDB and LibreTranslate containers. There is no Flatpak, RPM, AppImage or .deb: Flathub's app search for \"whishper\" returns 0 results, and the install docs list only Docker, quick-install script (Linux/macOS .sh, Windows .bat) and manual docker-compose as methods.",
+    "importance": "central",
+    "quote": "**Whishper** is an open-source, 100% local audio transcription and subtitling suite with a full-featured web UI. ... # Run it bash get-whishper.sh Just follow the steps, to get it setup with Docker. After the script finishes, you will be able to access Whishper at http://localhost:8082 . ... Whishper is a web application that runs inside a Docker container. This means that you can install it on any machine that supports Docker."
+   },
+   {
+    "claim": "Whishper does BATCH transcription only and has NO real-time/streaming ASR path: input is a complete uploaded file or a yt-dlp URL, audio is decoded to a full 16 kHz numpy array before decoding, and the browser microphone capture needed for live use is still an UNCHECKED roadmap item. Consequently it provides no time-to-first-partial or time-to-final streaming latency figures for Italian lectures.",
+    "importance": "central",
+    "quote": "- [x] 🗣️ **Transcribe any media** to text: audio, video, etc.\n  - Transcribe from URLs (any source supported by yt-dlp).\n  - Upload a file to transcribe. ... ### Roadmap\n- [ ] Audio recording from the browser."
+   },
+   {
+    "claim": "Whishper's GPU support is NVIDIA-CUDA ONLY — the device enum accepts just \"cpu\" or \"cuda\" and any other value is rejected with an explicit error, and non-NVIDIA GPU acceleration remains an unresolved roadmap question, so on the target machine (AMD Radeon RX 9070 RDNA4 / Navi48) it would run CPU-only via CTranslate2 int8, with a hardcoded default of only 4 CPU threads unless CPU_THREADS is set (against a 16-core target).",
+    "importance": "central",
+    "quote": "if device != \"cpu\" and device != \"cuda\":\n        return {\"detail\": \"Device must be either cpu or cuda\"} ... class DeviceType(str, Enum):\n    cpu = \"cpu\"\n    cuda = \"cuda\" ... - [ ] Non NVIDIA GPU support. Is it possible with faster-whisper?"
+   },
+   {
+    "claim": "Whishper is licensed AGPL-3.0 and is effectively unmaintained on its main branch: the last published release is v3.1.4 dated 2024-09-17, the last commit on main is 2025-08-15 (a docs-domain update, with only Dockerfile touch-ups in Jan 2025), and the maintainer states main is frozen in favour of a rewrite branch (since renamed v4-legacy, whose HEAD is 2025-06-30 and is still marked WORK IN PROGRESS). The repository is not archived and still has ~3.09k stars / 184 forks / 108 open issues, so 108 open PRs/issues are unanswered — meaning it must be treated as a reference implementation, not a maintained dependency.",
+    "importance": "supporting",
+    "quote": "## 🚧 I am working on a complete rewrite of the project. Progress on this can be seen at [v4 branch](https://github.com/pluja/whishper/tree/v4). Consequently, this branch will not receive any new releases or updates. ... > [!WARNING]\n> This rewrite is under development. ... ❇️ Open-source, 100% local audio transcription and subtitling suite with a full-featured web UI ❇️ ... ### 🚧 WORK IN PROGRESS..."
+   },
+   {
+    "claim": "The model catalogue exposed by the transcription API is bounded at large-v3 and contains neither large-v3-turbo nor any distil variant — the ModelSize enum offers only tiny(.en), base(.en), small(.en), medium(.en), large_v2 and large_v3, and the docs page states \"The models are: tiny, base, small, medium and large-v2\" with large-v3 added separately and turbo/distil never mentioned. Italian IS a supported transcription language (it = \"it\" in the Languages enum, alongside a separate \"auto\" language-detect mode), and the backend is FasterWhisper with beam_size=5 and word-level timestamps, quantized int8 on CPU.",
+    "importance": "supporting",
+    "quote": "class ModelSize(str, Enum):\n    tiny_en = \"tiny.en\" ... medium = \"medium\"\n    large_v2 = \"large-v2\"\n    large_v3 = \"large-v3\" ... class Languages(str, Enum):\n    auto = \"auto\" ... it = \"it\" ... - [x] 🚀 **Fast**: uses FasterWhisper as the Whisper backend: get much faster transcription times on CPU!"
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "GNOME 50 \"Tokyo\" was released 2026-03-18 and GNOME 51 \"A Coruña\" was released 2026-09-16, on GNOME's six-month cadence; the GNOME 51 page is the project's current stable release (its front matter declares aliases = [\"/latest\", \"/stable\"], and no other release version carries those aliases). This fixes the timeline relevant to the question of whether any GNOME 51 shortcut/portal feature exists that GNOME 50 lacks.",
+    "importance": "central",
+    "quote": "Introducing GNOME 51, \"A Coruña\" September 16, 2026 — \"After six months of intense development, we are thrilled to introduce GNOME 51, the latest version of GNOME.\" / Introducing GNOME 50, \"Tokyo\" March 18, 2026 — \"The GNOME project is delighted to unveil GNOME 50, a milestone that reflects six months of collective effort from our vibrant community.\""
+   },
+   {
+    "claim": "The official GNOME 51 release notes — both the user-facing page and the \"What's New for Developers\" sub-page — announce no desktop-portal API work at all: the complete \"Platform & Protocol Support\" enumeration contains only Wayland Text Input 3.2, xdg-session-management-v1, Android SDK 36 and a Vulkan preference, with no GlobalShortcuts, no ConfigureShortcuts/rebinding, no InputCapture, and no text-injection API. The same is true of the GNOME 50 notes (verified by keyword grep over both the rendered HTML and the upstream raw Markdown in gitlab.gnome.org/Teams/Websites/release.gnome.org), so the release notes provide no positive evidence of a GNOME 51 shortcut-rebinding or injection API.",
+    "importance": "central",
+    "quote": "Platform & Protocol Support — \"Wayland Text Input 3.2: Support for Wayland text input protocol version 3.2.\" / \"Session Management: Session saving implemented using the xdg-session-management-v1 protocol.\" / \"Android SDK 36: Android backend ported to SDK 36.\" / \"Vulkan Preference: Added gdk_display_get_prefer_vulkan() and gdk_display_set_prefer_vulkan().\""
+   },
+   {
+    "claim": "The GlobalShortcuts portal was first announced in GNOME 48 (2025-03-19) and is the most recent GNOME release note to mention it; GNOME 49, 50 and 51 contain no mention of global shortcuts, so the GNOME 51 release notes are not a source that announces a ConfigureShortcuts rebinding API (as distinct from the app-facing registration API that has existed since GNOME 48).",
+    "importance": "central",
+    "quote": "GNOME 48 comes with support for two major enhancements to desktop portals: global shortcuts, and the introduction of the USB portal. — \"With GNOME 48, it is now possible for apps to register system-wide global shortcuts. This allows apps to setup keyboard shortcuts which can be used while the app does not have focus. This feature is fully supported by GNOME 48, and API reference documentation is available.\" (release.gnome.org/48/developers/ — the last GNOME release notes to mention global shortcuts)"
+   },
+   {
+    "claim": "The toolkit platform changes across the GNOME 50 -> 51 window are GTK 4.22 / Libadwaita 1.9 (GNOME 50) and GTK 4.23 / Libadwaita 1.10 (GNOME 51); GNOME 51 adds a GTK input-interception API and Wayland text-input protocol 3.2 support, but these are input-method (IME) and in-widget interception facilities — not any mechanism for injecting text into another application's focused entry.",
+    "importance": "supporting",
+    "quote": "GNOME 51 includes GTK 4.23 and Libadwaita 1.10. ... Type-to-search reworked to use a \"push\" approach. New gtk_editable_set_input_interceptor() API for intercepting input. gtk_event_controller_key_forward() is deprecated. / (GNOME 50) \"GNOME 50 is accompanied by the latest version of GTK, 4.22.\" ... \"GNOME 50 is accompanied by the Libadwaita 1.9.\""
+   },
+   {
+    "claim": "The only GNOME 51 change bearing on the Flatpak sandboxing/distribution question is in GNOME Software, which expands the Flatpak file-permission list shown at install time; no new portal-based permission model for PipeWire/Wayland audio capture is announced in the GNOME 51 notes, and GNOME 51 was still pending distribution rollout (\"available in major Linux distributions in the coming weeks\") at the time of the release note, so Fedora packaging of GNOME 51 lands after the release date.",
+    "importance": "supporting",
+    "quote": "Clearer permissions: the list of Flatpak file permissions shown for an app has been expanded, giving you a fuller picture of what the app can access before you install it. ... \"GNOME 51 will be available in major Linux distributions in the coming weeks. If you feel adventurous, you can try GNOME OS Nightlies as a virtual machine or on actual hardware.\""
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "On native GNOME Wayland, hyprwhspr cannot use the wtype virtual-keyboard protocol (Mutter blocks it); it types ASCII directly via `ydotool type` on /dev/uinput for layouts that keep ASCII in US-QWERTY position, and otherwise falls back to a clipboard copy + synthetic paste chord (Ctrl+V / Ctrl+Shift+V). Focused-window detection on GNOME requires the AT-SPI accessibility bridge, enabled via `gsettings set org.gnome.desktop.interface toolkit-accessibility true`. This corroborates the established finding that no official xdg-desktop-portal API exists for programmatic text injection on GNOME Wayland.",
+    "importance": "central",
+    "quote": "**GNOME Wayland direct typing:** Mutter blocks `wtype`, so ASCII text is typed directly with `ydotool type` on layouts that keep ASCII where US QWERTY does — checked against your compiled XKB keymap, not the layout name, so Polish, Romanian and the like type directly while German, French and any Dvorak/Colemak variant fall back to clipboard paste. Set `\"prefer_clipboard_paste\": true` to always use clipboard paste. ... **Window detection** uses the AT-SPI accessibility bridge — `hyprwhspr setup` offers to enable it (`gsettings set org.gnome.desktop.interface toolkit-accessibility true`). Without it, GNOME can't tell terminals apart and paste falls back to Ctrl+V."
+   },
+   {
+    "claim": "GNOME/Mutter has no layer-shell support, so hyprwhspr's recording-status overlay degrades to desktop notifications on GNOME; the only always-on-top translucent overlay path on GNOME is an optional, non-essential GNOME Shell extension shipped in contrib/gnome-shell-extension/, which reads hyprwhspr's state and audio-level files and is not required for operation (GNOME falls back to notifications when disabled).",
+    "importance": "central",
+    "quote": "GNOME/Mutter lacks layer-shell, so visual feedback uses notifications. ... GNOME users who want an animated waveform instead of notifications can install the opt-in GNOME Shell extension in `contrib/gnome-shell-extension/` — it draws inside gnome-shell, always-on-top, without stealing focus ... The extension only reads hyprwhspr's state and audio-level files — disable it and GNOME falls back to notifications."
+   },
+   {
+    "claim": "The only true streaming/live-typing backends in hyprwhspr — self-hosted NeMo-Speech.cpp and Phonon — are documented as English-only, so as of v1.49.2 the project provides no Italian true-streaming path; Italian is only reachable via batch/push-to-talk Whisper backends (faster-whisper, whisper.cpp, ONNX) or via cloud APIs (which break the offline requirement). The live-typing feature is also marked experimental.",
+    "importance": "central",
+    "quote": "**NeMo-Speech.cpp** — English, [live typing](#live-typing). ... **[Phonon](https://github.com/fermionresearch/phonon)** — English, live OSD preview. ... Words land as you speak. Needs a model whose words never change once sent (`append_only`): today, NeMo. ... Live streaming - Self-host NeMo or Phonon: watch words form, or type as you speak (experimental)"
+   },
+   {
+    "claim": "hyprwhspr implements its global hotkey by evdev-level keyboard grabbing (reading /dev/input/event*) and by a private rootless ydotoold instance using the `uaccess` ACL on /dev/uinput — not via the xdg-desktop-portal GlobalShortcuts portal (which is absent from its documentation) — and the `input` group + udev rule installed by setup exist primarily to enable that hotkey. A compositor/hotkey-daemon delegation path (`external_bindings: true`) is offered as an alternative. This is the same /dev/uinput + udev-rule + input-group pattern the research already verified for ydotool on this machine, and it is what makes a Flatpak packaging of this app problematic.",
+    "importance": "central",
+    "quote": "It runs rootless via the `uaccess` ACL on `/dev/uinput`; the `input` group and udev rule from setup are the fallback, and mainly serve the global hotkey (evdev reads of `/dev/input/event*`). ... hyprwhspr can start even if you are not in the `input` group, but the global shortcut will not work. ... Works with Hyprland, niri, Sway or any hotkey daemon."
+   },
+   {
+    "claim": "Italian is a first-class documented language in hyprwhspr's Whisper backends via language code `it` (one of Whisper's 99 codes), configurable globally via `language` and per-shortcut via `secondary_language: \"it\"`; however the project's only published measured benchmark covers English clips only (640 clips, 65.8 min, 10 corpora) on an aarch64 Colima VM, reporting a warm weighted real-time factor of 0.05744 (stock Parakeet) and 0.04456 (Orukeet) and warm median per-call latency of 307.35 ms / 240.43 ms — so no measured Italian or lecture-audio WER/latency figures exist for this project. The project is MIT-licensed and actively maintained (v1.49.2 published 2026-10-19, 1,256 stars, 1,276 commits, last push 2026-10-19).",
+    "importance": "supporting",
+    "quote": "Whisper accepts any of its 99 supported language codes — the core set: | `es` | Spanish | `ru` | Russian | | `it` | Italian | `zh` | Chinese | ... 640 previously selected English clips, 64 from each of 10 locally cached public corpora, 65.8 minutes total. ... | Warm weighted real-time factor | 0.05744 | 0.04456 | | Warm median call | 307.35 ms | 240.43 ms | ... Linux 6.8 aarch64 in an existing Colima VM on Apple M5 Max, 4 vCPUs and 8 GiB. CPU execution ... This is not an x86 or bare-metal measurement."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "Voxtype (peteonrails/voxtype) is an MIT-licensed, actively maintained Linux push-to-talk offline dictation application (v1.1.1 released 2026-10-15; repo pushed 2026-10-18) with nine ASR engines, and Italian is an explicitly supported language via Whisper (99 languages) and the Cohere Transcribe ONNX engine, whose 14-language list names Italian.",
+    "importance": "central",
+    "quote": "\"Voice-to-text for Linux. 9-11× realtime on your CPU. Local by default.\" … \"MIT licensed. AUR (`voxtype`, `voxtype-bin`, plus `voxtype-bin-rc` for testers who want pre-release builds — see [docs/INSTALL.md](docs/INSTALL.md#arch-linux)), `.deb`, `.rpm`, Homebrew on macOS. Signed release binaries from a reproducible Docker pipeline.\" … \"For other languages, use `large-v3` which supports 99 languages.\" … USER_MANUAL engine table: \"| **Cohere** | #1 Open ASR Leaderboard accuracy | Optional (CUDA via `cohere-cuda`) | Arabic, German, English, Spanish, French, Hindi, Italian, Japanese, Korean, Dutch, Portuguese, Russian, Turkish, Chinese (14) |\""
+   },
+   {
+    "claim": "On GNOME/Wayland, Voxtype's preferred text-injection path (wtype via zwp_virtual_keyboard_v1) is unavailable because mutter does not implement that protocol; text insertion into the focused app therefore falls back to dotool → ydotool → clipboard, with the libei/EI-based eitype driver recommended on GNOME — and all uinput-based paths require membership in the `input` group.",
+    "importance": "central",
+    "quote": "\"**KDE Plasma / GNOME users:** wtype does not work on these desktops. Voxtype automatically falls back to dotool (recommended for non-US layouts) or ydotool.\" … TROUBLESHOOTING.md: \"**Cause:** KDE Plasma and GNOME do not implement the `zwp_virtual_keyboard_v1` Wayland protocol that wtype requires. This is a compositor limitation, not a voxtype bug.\" … USER_MANUAL: \"wtype does not work on all Wayland compositors. KDE Plasma and GNOME do not support the virtual keyboard protocol that wtype requires. However, eitype uses the libei/EI protocol which is supported by GNOME and KDE.\" … \"User must be in the `input` group (for evdev access)\""
+   },
+   {
+    "claim": "Voxtype's floating waveform OSD cannot work on GNOME/Mutter at all: both OSD frontends depend on wlr-layer-shell, which mutter does not implement, so the OSD silently fails to render (gtk4-layer-shell only degrades to a plain xdg toplevel that other windows can cover); the corresponding issue is still open with no fix.",
+    "importance": "central",
+    "quote": "Issue #807 (open): \"GNOME's Mutter compositor does not implement this protocol\" and the OSD \"fails to actually render.\" … \"gtk4-layer-shell falls back to a plain xdg toplevel.\" It may display but can be covered by other windows. … workaround: \"Disable it with `osd.enabled = false`\" or use a GNOME Shell extension."
+   },
+   {
+    "claim": "The xdg-desktop-portal GlobalShortcuts portal is not used in any shipped Voxtype release: the released v1.1.1 implements the global hotkey through Linux evdev (ScrollLock default, requiring `input` group), and GlobalShortcuts portal support exists only as an unmerged draft PR using org.freedesktop.portal.GlobalShortcuts/BindShortcuts that additionally requires xdg-desktop-portal 1.20+; GNOME's own custom-shortcut mechanism reports key presses but not releases, which breaks push-to-talk semantics.",
+    "importance": "supporting",
+    "quote": "README: \"**X11 / Built-in hotkey fallback:** If you're on X11 or prefer voxtype's built-in hotkey (ScrollLock by default), add yourself to the `input` group: `sudo usermod -aG input $USER` and log out/in.\" … PR #616 (Draft, not merged): \"It uses `org.freedesktop.portal.GlobalShortcuts`\", naming \"`BindShortcuts` for the potentially interactive binding request\"; \"Portal use requires xdg-desktop-portal 1.20+, compatible desktop support, and a discoverable `io.voxtype.Voxtype.desktop` file.\" … \"GNOME's ordinary custom shortcut reports key presses but not releases, preventing proper push-to-talk; the portal path supplies the release event.\""
+   },
+   {
+    "claim": "Voxtype is distributed for Fedora as a plain RPM (no Flatpak manifest exists in the repository; Silverblue bundling is only an open feature request), its audio capture goes through cpal/ALSA rather than PipeWire natively so the pipewire-alsa ALSA bridge is a hard dependency, and the project's own measured CPU-only throughput is ~7x realtime for base.en but only ~1x realtime for large-v3.",
+    "importance": "supporting",
+    "quote": "packaging/rpm/voxtype.spec: \"Requires:       pipewire-alsa\" and \"%post\" prints \"Add your user to the 'input' group: sudo usermod -aG input $USER\". INSTALL.md: \"**PipeWire users:** install `pipewire-alsa` so ALSA-based apps like Voxtype can capture audio. Without it you get \\\"device not available\\\" errors.\" README perf table: \"Results vary by hardware. Example on AMD RX 6800: | base.en | ~7x realtime | ~35x realtime | | large-v3 | ~1x realtime | ~5x realtime |\" … CONFIGURATION.md: \"Benchmarks on AMD Radeon RX 7800 XT with large-v3-turbo: | Standard (`false`) | 0.49s avg | ~1.6 GB | 409 MB |\""
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "Vocalinux is an actively maintained, AGPL-3.0-licensed, fully offline Linux dictation app that types into the focused application and supports X11 and Wayland; it ships whisper.cpp (default, with Vulkan GPU acceleration on AMD/Intel/NVIDIA), OpenAI Whisper, Faster Whisper, VOSK and Parakeet engines, plus an .rpm for Fedora and a Flatpak built on the GNOME 50 runtime — but it is NOT on Flathub. Latest stable release v0.18.4 was published 2026-10-21, with nightly builds published 2026-10-22, 959 GitHub stars, 18 open issues, last repo push 2026-10-22.",
+    "importance": "central",
+    "quote": "Vocalinux turns speech into typed text in whatever app has focus. It is a free, AGPL-3.0-licensed desktop app for X11 and Wayland. After you download a model, local engines (whisper.cpp by default, plus OpenAI Whisper, Faster Whisper, VOSK, and Parakeet) run speech-to-text on your machine. An optional remote HTTP API is off unless you configure it. [...] Ships whisper.cpp with Vulkan. It is **not on Flathub** (submission [flathub#9368](https://github.com/flathub/flathub/pull/9368) closed 2026-07-23 on policy grounds)."
+   },
+   {
+    "claim": "Italian is a first-class recognition language in Vocalinux with dedicated Vosk checkpoints (vosk-model-small-it-0.22 for the small tier, vosk-model-it-0.22 for medium/large), whisper language code \"it\", and Italian spoken punctuation commands (virgola -> ',' , punto -> '.'). However the project publishes NO Italian WER/WIL/CER benchmarks and no latency numbers anywhere in the README, docs, or source — the only numerical performance figure emitted is a runtime RTF log line.",
+    "importance": "central",
+    "quote": "\"it\": { \"name\": \"Italian\", \"whisper\": \"it\", \"vosk\": \"vosk-model-small-it-0.22\", } [...] logger.info(f\"whisper.cpp transcription completed in {transcribe_duration:.3f}s for {duration:.2f}s audio (RTF: {rtf:.2f}x) - {num_segments} segments\")"
+   },
+   {
+    "claim": "For native Wayland text injection Vocalinux uses only the org.freedesktop.portal.RemoteDesktop portal (NotifyKeyboardKeysym), which needs no /dev/uinput, no helper daemon and no zwp_input_method_v2 support, and works inside a Flatpak sandbox. Critically, it does NOT use the GlobalShortcuts portal at all (zero occurrences in the codebase); global hotkeys instead read raw kernel input devices via evdev, requiring `input` group membership or Flatpak --device=input/--device=all, otherwise the hotkey is silently disabled.",
+    "importance": "central",
+    "quote": "``org.freedesktop.portal.RemoteDesktop`` is the only key-injection path Wayland itself sanctions: the compositor's portal backend prompts the user once, hands back a session, and after that ``NotifyKeyboardKeysym`` injects keysyms without ``/dev/uinput``, a helper daemon, or compositor support for ``zwp_input_method_v2``. It also works from inside a Flatpak sandbox, where the Wayland socket may not exist at all. [...] \"Grant --device=input (Flatpak 1.15.6+) or --device=all, or enable \""
+   },
+   {
+    "claim": "Vocalinux's floating overlay is GTK3 (not GTK4) and its always-on-top behavior depends on gtk-layer-shell, which is bundled only in the AppImage and is absent from the Flatpak manifest; without layer shell the overlay degrades to a plain xdg_toplevel that Mutter activates (stealing focus from the dictation target), and its click-through relies on a cairo empty input region plus set_override_redirect, which the code itself states is a no-op on Wayland. This independently corroborates that native GNOME Wayland offers no working always-on-top/click-through client path.",
+    "importance": "central",
+    "quote": "\"\"\"Construct the floating transparent always-on-top bottom strip.\"\"\" [...] # Soft Wayland layer-shell (optional — never required). [...] Mutter and other Wayland compositors activate new xdg_toplevels. Layer-shell surfaces with keyboard mode NONE and X11 override-redirect windows do not. [...] # Empty input region → pointer events pass through to apps below. [...] # X11: override-redirect popups do not take focus; no-op on Wayland."
+   },
+   {
+    "claim": "Despite marketing itself as \"real-time\" dictation, Vocalinux implements no true streaming/streaming-partial ASR: the VOSK path calls only FinalResult() (never PartialResult()), the whisper.cpp path is a batch model.transcribe() over VAD-segmented audio chunks (Silero VAD, default 1.2 s silence timeout, 90 s max segment), and in push-to-talk mode the recognized text is withheld until the key is released. It therefore provides no time-to-first-partial measurement of any kind.",
+    "importance": "supporting",
+    "quote": "result = json.loads(self.recognizer.FinalResult())\n            return result.get(\"text\", \"\") [...] segments = self.model.transcribe(audio_float, **transcribe_kwargs) [...] # Push-to-talk text is held until the key is released."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "Buzz is an MIT-licensed, actively maintained (as of 2026) offline Whisper speech-to-text/translation desktop app available for Linux via Flatpak (io.github.chidiwilliams.Buzz), Snap and AppImage; the latest published release is v1.4.5 (2026-08-23), the repo had 22,135 stars and was last pushed 2026-10-17, and it ships an Italian UI locale (it_IT).",
+    "importance": "central",
+    "quote": "\"Buzz transcribes and translates audio to text offline using OpenAI's Whisper.\" … <release version=\"1.4.5\" date=\"2026-08-23\"> … \"Buzz is available as a Flatpak, Snap or Appimage\" (Flathub id io.github.chidiwilliams.Buzz) … license: \"MIT License\" (SPDX: MIT), archived: false, stargazers_count: 22135, pushed_at: \"2026-10-17T09:14:59Z\"; buzz/locale/ contains it_IT/LC_MESSAGES"
+   },
+   {
+    "claim": "Buzz provides none of the four required overlay features: its live-caption \"presentation window\" is a plain Qt window with no always-on-top/keep-above flag, all 20 keyboard shortcuts are application-level (persisted in QSettings, not registered with any global-shortcut portal or XGrabKey), there is no click-through support, and no feature inserts transcript text into the focused application (output is only exported to TXT/SRT/VTT).",
+    "importance": "central",
+    "quote": "\"self.setWindowFlag(Qt.WindowType.Window)\" … \"self.transcript_display = QTextBrowser(self)\" … \"OPEN_RECORD_WINDOW = (\"Ctrl+R\", _(\"Open Record Window\"))\" … \"return custom_shortcuts.get(shortcut.name, shortcut.sequence)\" / \"self.settings.set_value(Settings.Key.SHORTCUTS, custom_shortcuts)\" … \"Export transcripts to TXT, SRT, and VTT.\""
+   },
+   {
+    "claim": "Buzz's advertised \"Live realtime audio transcription from microphone\" is NOT a streaming/online transducer: it runs the same offline Whisper models on fixed 5-second audio batches with a default transcription step of 3.5 s, uses an energy-threshold silence/boundary detector rather than a neural VAD, and emits only a single text signal with no partial-vs-final distinction — so end-to-end latency is inherently multiple seconds.",
+    "importance": "central",
+    "quote": "\"self.n_batch_samples = int(5 * self.sample_rate)  # 5 seconds\" … \"if self.queue.size >= self.n_batch_samples:\" … \"search_seconds: float = 1.5,\" / \"window_seconds: float = 0.02,\" / \"silence_ratio: float = 0.5) -> int:\" / \"threshold = silence_ratio * mean_energy\" … \"transcription = pyqtSignal(str)\" … \"self.transcription.emit(next_text)\" … key=Settings.Key.RECORDING_TRANSCRIBER_TRANSCRIPTION_STEP, default_value=3.5"
+   },
+   {
+    "claim": "The official Flathub manifest for Buzz requests raw PulseAudio/PipeWire capture and DRM device access via flatpak finish-args rather than using xdg-desktop-portal: it declares --socket=wayland, --socket=fallback-x11, --socket=pulseaudio, --device=dri, --share=ipc, --share=network and --talk-name=org.freedesktop.secrets, with no --talk-name=org.freedesktop.portal.Desktop and no camera/screen-capture portal talk-name; filesystem access is limited to the XDG user dirs (xdg-desktop, xdg-documents, xdg-download, xdg-music, xdg-videos).",
+    "importance": "central",
+    "quote": "\"--socket=wayland\" … \"--socket=fallback-x11\" … \"--socket=pulseaudio\" … \"--talk-name=org.freedesktop.secrets\" … \"--device=dri\" … \"--share=network\" … \"--share=ipc\" … \"--filesystem=xdg-desktop\" … \"--filesystem=xdg-documents\" … \"--filesystem=xdg-download\" … \"--filesystem=xdg-music\" … \"--filesystem=xdg-videos\" (app-id: io.github.chidiwilliams.Buzz)"
+   },
+   {
+    "claim": "Buzz's model menu is the standard OpenAI Whisper size list — it offers large-v3 and large-v3-turbo but no distil-* variant and no dedicated realtime/streaming model — and its only Linux GPU acceleration path for AMD/Intel hardware is whisper.cpp via Vulkan, which the project claims works on most GPUs including integrated GPUs; NVIDIA-only CUDA is a separate optional path.",
+    "importance": "supporting",
+    "quote": "\"LARGEV3 = \"large-v3\"\" … \"LARGEV3TURBO = \"large-v3-turbo\"\" … \"TINY = \"tiny\"\" / \"BASE = \"base\"\" / \"SMALL = \"small\"\" / \"MEDIUM = \"medium\"\" … \"Vulkan acceleration support for Whisper.cpp on most GPUs, including integrated GPUs\" … \"CUDA acceleration support for Nvidia GPUs\""
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "sherpa-onnx ships a true streaming (online transducer: separate encoder/decoder/joiner ONNX graphs) multilingual ASR model — NVIDIA `nemotron-3.5-asr-streaming-0.6b` — in which Italian (it-IT) is one of the 19 locales that transcribe directly out of the box, without fine-tuning; a further 13 locales are 'usable, but with higher error rates' and 8 more 'require fine-tuning before they can transcribe'. Italian therefore falls in the highest-confidence tier of the multilingual checkpoint, though no Italian WER/CER is published on the page.",
+    "importance": "central",
+    "quote": "Unlike the English-only model above, a single model supports 40 language-locales from one checkpoint. ... The 19 transcription-ready locales work out of the box: ... Italian (it-IT), Portuguese (pt-BR, pt-PT), Dutch (nl-NL), German (de-DE) ... It also covers 13 broad-coverage locales (usable, but with higher error rates) ... A further 8 adaptation-ready locales require fine-tuning before they can transcribe"
+   },
+   {
+    "claim": "The Nemotron streaming models are distributed only as INT8 ONNX and come in exactly four chunk durations — 80ms, 160ms, 560ms, 1120ms — with the page stating that accuracy rises with chunk size; the 80ms variant is the lowest-latency configuration and the 1120ms the highest-accuracy one, giving a concrete latency/accuracy dial for a real-time Italian lecture app.",
+    "importance": "central",
+    "quote": "The model supports 4 different chunk sizes: 80ms, 160ms, 560ms, and 1120ms. ... It also supports the same 4 chunk sizes: 80ms, 160ms, 560ms, and 1120ms. ... The larger the chunk size, the higher the accuracy."
+   },
+   {
+    "claim": "The only measured CPU real-time factor on the page is RTF = 0.16 (1.1 s elapsed for 6.6 s of audio) using a single CPU thread on the English 560ms model, with recognizer construction taking 0.876 s — i.e. the streaming transducer runs roughly 6x faster than real time on one core, though this number is for English test audio, not Italian or lecture audio.",
+    "importance": "central",
+    "quote": "Number of threads: 1, Elapsed seconds: 1.1, Audio duration (s): 6.6, Real time factor (RTF) = 1.1/6.6 = 0.16 ... Recognizer created in 0.87634 s"
+   },
+   {
+    "claim": "No Italian (or any language-specific) WER/CER figure is given on the page: the only error-rate content is a 'WER vs chunk size' figure credited to NVIDIA's model page, with no underlying datasets (AISHELL, LibriSpeech, GigaSpeech, Common Voice, FLEURS are all absent) and no numeric Italian error rate, so Italian accuracy for this streaming model must be measured locally rather than taken from this documentation.",
+    "importance": "supporting",
+    "quote": "WER vs chunk size ... No WER number for Italian appears on the page."
+   },
+   {
+    "claim": "The sherpa-onnx streaming Nemotron models were actively maintained and released in 2026 — English-only archives dated 2026-04-25 and the multilingual (Italian-capable) archives dated 2026-06-11, with documentation version 1.3 and Android APK 1.12.40 — confirming this is a current, not abandoned, streaming-ASR path for Italian.",
+    "importance": "supporting",
+    "quote": "sherpa-onnx-nemotron-speech-streaming-en-0.6b-{80ms|160ms|560ms|1120ms}-int8-2026-04-25.tar.bz2 ... sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-{80ms|160ms|560ms|1120ms}-int8-2026-06-11.tar.bz2"
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "mTEDx (Interspeech 2021, Salesky et al., JHU + Fondazione Bruno Kessler) provides an Italian (ISO-639-1 `it`) speech-recognition corpus of 107 hours / 53k utterances, plus translated subsets it→en (53 h / 27k sentences) and it→es (11 h / 5k sentences), released under CC BY-NC-ND 4.0 at openslr.org/100. This is a directly usable Italian evaluation corpus of spontaneous talks, alongside Common Voice and FLEURS.",
+    "importance": "supporting",
+    "quote": "it   107    53k    53 27k 11 5k       —       —\n... Table 1: Corpus statistics showing total number of hours and utterances for ASR and MT/ST tasks. Languages are represented by their ISO 639-1 code. ... The Multilingual TEDx corpus is released under a CC BY-NC-ND 4.0 license, and can be freely downloaded at http://www.openslr.org/100."
+   },
+   {
+    "claim": "Measured Italian ASR test WER on mTEDx (2021-era baselines, not Whisper): a Kaldi CNN-TDNNf hybrid with LF-MMI objective, 40-dim MFCC + CMVN, 4-gram SRILM LM, 16 kHz audio reaches 16.4% WER, while a from-scratch Fairseq seq2seq Transformer reaches 48.0% WER — so a pure Transformer trained on only 107 h of Italian is ~3x worse than a hybrid, and any Whisper-family WER reported on this corpus must be compared against a 16.4% hybrid reference, not the 48.0% Transformer.",
+    "importance": "central",
+    "quote": "Model                 es         fr         pt         it\nHybrid LF-MMI        16.2       19.4       20.2       16.4\nTransformer          46.4       45.6       54.8       48.0\nTable 3: ASR results on test in WER↓. Comparing KALDI Hybrid LF-MMI and FAIRSEQ Transformer models (no pretraining)."
+   },
+   {
+    "claim": "Cross-lingual/pretraining transfer is the dominant lever for Italian ASR quality at this data scale: pretraining the Transformer ASR encoder on larger English MuST-C data reduced WER by 15-20 points for all languages except the two lowest-resource ones, and the paper attributes the hybrid's edge to robustness in low-resource conditions. This supports the claim that a Whisper large-v3 (massively multilingual-pretrained) baseline should dominate any Italian-only model trained on the 107 h mTEDx corpus.",
+    "importance": "supporting",
+    "quote": "When pretrained with larger English datasets from MuST-C, we saw improvements of 15-20 WER for all but our two lowest-resource languages. ... The Hybrid LF-MMI models seem more robust to lower-resource conditions."
+   },
+   {
+    "claim": "mTEDx audio is spontaneous, lecture-style single-speaker talk audio (same format as TED talks, 44.1/48 kHz WAV, sentence-segmented transcripts) rather than read speech, making it a closer proxy to real-world Italian lecture audio than read-speech corpora — the paper explicitly contrasts itself with ST corpora that \"consist only of read speech\".",
+    "importance": "central",
+    "quote": "TEDx events, launched in 2009, are independently hosted TED events. TEDx talks share the same format as TED talks. ... Collecting data in a variety of genres is critical for building generalizable models and assessing real-world performance of ST systems, but many ST corpora consist only of read speech"
+   },
+   {
+    "claim": "Italian is an outlier language in mTEDx: ASR performance did not scale with data size as expected for Italian (unlike Spanish/French/Portuguese), and 2 talks had to be excluded because alignment failed — inspection showed their \"transcripts\" were actually dialectal (regional) translations rather than standard Italian. This documents that Italian TEDx test data contains dialectal/regional variation and that 107 h of Italian is not uniformly standard orthographic speech, a known source of WER degradation and of spurious non-determinism in Italian WER/CER measurements.",
+    "importance": "supporting",
+    "quote": "In general, our models' performance scaled with data size; however, there were exceptions, such as Italian and Arabic. ... We exclude the 2 talks where the majority of segments failed to align, typically signalling a significant transcript mismatch; upon inspection in these cases, the 'transcripts' were in fact dialectal translations."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "NVIDIA Nemotron 3.5 ASR Streaming 0.6B — a true streaming transducer (FastConformer-CacheAware-RNNT, 600M params, 24-layer encoder) — supports Italian (it-IT) out of the box as a top-tier 'transcription-ready' locale, with FLEURS Italian WER of 5.23% at the 80 ms chunk and 4.25% at the 1120 ms chunk (LangID mode); auto-detect mode adds only ~0.07-0.15 pp (5.28 / 4.32). Italian is the 2nd-best of the 19 transcription-ready locales, behind Spanish (4.87% @80 ms).",
+    "importance": "central",
+    "quote": "| **Transcription-ready (19 locales)** | English (en-US, en-GB), Spanish (es-US, es-ES), French (fr-FR, fr-CA), Italian (it-IT), Portuguese (pt-BR, pt-PT) ... | ... <tr><td align=\"left\">Italian (it-IT)</td><td align=\"center\">5.23</td><td align=\"center\">4.85</td><td align=\"center\">4.83</td><td align=\"center\">4.41</td><td align=\"center\">4.25</td><td align=\"center\">5.28</td><td align=\"center\">4.89</td><td align=\"center\">4.84</td><td align=\"center\">4.47</td><td align=\"center\">4.32</td></tr> ... name: FLEURS (Italian) / config: it_it / name: WER (1.12s frame size, LangID) / value: 4.25"
+   },
+   {
+    "claim": "The model's streaming granularity is directly tunable at runtime without retraining via att_context_size in 80 ms frames: [56,0]=80 ms, [56,1]=160 ms, [56,3]=320 ms, [56,6]=560 ms, [56,13]=1120 ms, with chunk = current frame + right context processed non-overlapping. This is the only published mechanism giving a user-selectable accuracy-vs-latency operating point, and Italian WER degrades monotonically with smaller chunks (4.25 @1120 ms -> 4.41 @560 -> 4.83 @320 -> 4.85 @160 -> 5.23 @80).",
+    "importance": "central",
+    "quote": "Latency is defined by the `att_context_size` param, where att_context_size = `{num_frames_left_context, num_frame_right_context}`, all measured in **80ms frames**:\n\n* [56, 0]: Chunk size = 1 (1 × 80ms = 0.08s)\n* [56, 1]: Chunk size = 2 (2 × 80ms = 0.16s)\n* [56, 3]: Chunk size = 4 (4 × 80ms = 0.32s)\n* [56, 6]: Chunk size = 7 (7 × 80ms = 0.56s)\n* [56, 13]: Chunk size = 14 (14 × 80ms = 1.12s)\n\nHere, chunk size = current frame + right context; each chunk is processed in non-overlapping fashion. ... 🎛️ **Dynamic Runtime Flexibility:** Choose the optimal operating point on the latency-accuracy Pareto curve at inference time. No re-training is required to adjust for different use-case requirements."
+   },
+   {
+    "claim": "CRITICAL GAP for an offline CPU app: the model card publishes NO numeric end-to-end latency for Italian (no time-to-first-partial, no time-to-final). Every latency and throughput figure is GPU-only, measured on a single NVIDIA H100, and the 80-1120 ms values are chunk intervals, not measured latency. No CPU benchmark exists, so the RTX-class-free Fedora 44 CPU path is unquantified by the vendor.",
+    "importance": "central",
+    "quote": "> Measured on a single NVIDIA H100. Throughput is the number of real-time streams sustainable in parallel; latency is the median final-token latency at a given level of concurrency. ... <img src=\"latency_vs_parallel.png\" alt=\"Median final-token latency vs number of parallel requests on a single H100, Nemotron vs Parakeet RNNT across chunk sizes\" ...> ... At the lowest-latency 80ms setting, Nemotron sustains **~17× more concurrent streams** (240 vs. 14); at the 1120ms setting it sustains **6× more** (2,400 vs. 400). ... By leveraging NVIDIA's hardware (e.g. GPU cores) and software frameworks (e.g., CUDA libraries), the model achieves faster training and inference times compared to CPU-only solutions."
+   },
+   {
+    "claim": "A local, fully-offline inference path exists: a quantized q8_0 GGUF plus NVIDIA's NeMo-Speech.cpp native C++ runtime (`nemo-speech transcribe audio.wav --model ...q8_0.gguf --language it-IT`), which is the documented mechanism for CPU/on-device execution — but the card gives no CPU speed figure for it. The model also runs in HuggingFace Transformers (Nemotron3_5Asr, transformers>=5.13.0) and NVIDIA NeMo, with native punctuation and capitalization in the output.",
+    "importance": "supporting",
+    "quote": "[NeMo-Speech.cpp](https://github.com/NVIDIA/NeMo-Speech.cpp) provides a\nlightweight native C++ runtime for local inference with\nthis model. After [installing the runtime](https://github.com/NVIDIA/NeMo-Speech.cpp#installation):\n\n```bash\nhf download nvidia/nemotron-3.5-asr-streaming-0.6b \\\n  nemotron-3.5-asr-streaming-0.6b.q8_0.gguf \\\n  --local-dir models\n\nnemo-speech transcribe audio.wav \\\n  --model models/nemotron-3.5-asr-streaming-0.6b.q8_0.gguf \\\n  --language en-US\n```"
+   },
+   {
+    "claim": "The published Italian accuracy is clean-read-speech only: the model card's evaluation is limited to FLEURS, Common Voice (MCV), Multilingual LibriSpeech (MLS) and NVIDIA internal sets, with no lecture/ted/conversational-domain evaluation and no reported FLEURS-vs-lecture delta. Italian is also a thin slice of the validation data (it-IT: 2.14%), and the card warns that text normalization is imperfect across the 40 locales and can inflate reported error rates — meaning the 4.25-5.23% Italian WER is an optimistic floor for real-world Italian lecture audio.",
+    "importance": "supporting",
+    "quote": "The model was evaluated on multilingual ASR benchmarks:\n\n- FLEURS\n- Mozilla Common Voice (MCV)\n- Multilingual LibriSpeech (MLS)\n- NVIDIA internal multilingual evaluation sets ... > **Note on text normalization:** WER/CER are computed after text normalization that aligns the reference and hypothesis (e.g., casing, punctuation, numerals, and formatting conventions). Normalization is not perfect across all 40 language-locales, and residual mismatches between normalized text can inflate the reported error rates — actual transcription quality may be somewhat better than the numbers suggest. ... What is the language balance of the model validation data? | ... it-IT: 2.14% ..."
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "On the Open ASR Leaderboard multilingual track, openai/whisper-large-v3 scores Italian WER of 5.31 on Common Voice (it_covost), 6.50 on Multilingual LibriSpeech (it_mls) and 2.26 on FLEURS (it_fleurs), while openai/whisper-large-v3-turbo scores 6.84 / 6.63 / 3.28 respectively — i.e. the turbo variant is WORSE than large-v3 on all three Italian benchmarks (as expected, since turbo is English-heavy and drops the decoder's cross-lingual strength).",
+    "importance": "central",
+    "quote": "openai/whisper-large-v3,2,110.92,5.25,3.27,10.18,3.92,4.98,5.31,6.5,2.26,4.47,4.16,2.31,6.39,3.53,4.81\nopenai/whisper-large-v3-turbo,0.8,176.16,8.64,3.78,11.4,4.27,5.04,6.84,6.63,3.28,6.35,3.96,2.7,5.55,3.8,5.556923077"
+   },
+   {
+    "claim": "The multilingual.csv leaderboard contains only TWO whisper-family rows (large-v3 and large-v3-turbo) out of 30 models — whisper medium, small, base and all distil-whisper variants are NOT evaluated in the Italian multilingual track at all, so the leaderboard gives no Italian WER numbers for the smaller/distilled whisper variants that would be feasible on a 16-core CPU with 14 GiB RAM. (For contrast, the sibling en_shortform.csv does include distil-whisper/distil-large-v3.5 at Avg. WER 7.21 and distil-whisper/distil-large-v3 at 7.5175, but only for English.)",
+    "importance": "central",
+    "quote": "model,Model size (B),RTFx,de_covost,de_fleurs,fr_covost,fr_mls,fr_fleurs,it_covost,it_mls,it_fleurs,es_covost,es_mls,es_fleurs,pt_mls,pt_fleurs,Avg"
+   },
+   {
+    "claim": "Among models measured on identical hardware (1x H200), openai/whisper-large-v3 has RTFx = 110.92 and openai/whisper-large-v3-turbo RTFx = 176.16, while the fastest open model nvidia/parakeet-tdt-0.6b-v3 reaches RTFx = 1719.32 with Italian WER 3.42 / 8.54 / 2.46 (covost/mls/fleurs). These RTFx figures are GPU (H200) numbers and therefore cannot be used directly to predict CPU-only real-time latency on a 16-core AMD system.",
+    "importance": "central",
+    "quote": "nvidia/parakeet-tdt-0.6b-v3,0.6,1719.32,4.13,4.26,6.38,5.12,4.76,3.42,8.54,2.46,3.55,4.41,3.24,7.78,4.53,4.813846154"
+   },
+   {
+    "claim": "Several of the highest-accuracy Italian models are cloud-only API services and are therefore excluded from a fully offline local app: elevenlabs/scribe_v2 (it_covost 2.22, it_mls 4.57, it_fleurs 0.94), assembly/universal-3-pro (3.53 / 6.98 / 1.30) and speechmatics/enhanced (4.04 / 10.01 / 2.68) all carry an RTFx of -1 (no locally measurable real-time factor), whereas CohereLabs/cohere-transcribe-03-2026 (2.65 / 4.92 / 2.76) carries a spurious RTFx of 491.36 despite being an API model.",
+    "importance": "supporting",
+    "quote": "elevenlabs/scribe_v2,,-1,2.24,2.3,4.45,2.54,2.86,2.22,4.57,0.94,2.51,2.56,1.91,3.02,2.63,2.673076923\n...\nCohereLabs/cohere-transcribe-03-2026,2,491.36,3.53,4.16,4.96,2.39,4.8,2.65,4.92,2.76,2.68,2.31,3.44,6.62,4.58,3.83"
+   },
+   {
+    "claim": "The multilingual benchmark is evaluated on three Italian read-speech corpora only — Mozilla Common Voice Italian (mcv_it, 8,951 test utterances), Multilingual LibriSpeech Italian (mls_it, 657 test utterances) and FLEURS Italian (fleurs_it, 865 test utterances) — all of which are clean read speech, so none of the 30 rows provide WER for real-world Italian lecture audio (spontaneous, noisy, far-field, single-speaker-over-room-tone). The published leaderboard therefore cannot answer the lecture-domain degradation question directly.",
+    "importance": "central",
+    "quote": "# Evaluates on FLEURS, MCV (Mozilla Common Voice), and MLS (Multilingual LibriSpeech)"
+   }
+  ]
+ },
+ {
+  "sourceQuality": "primary",
+  "claims": [
+   {
+    "claim": "The ScreenCast portal (interface version 6) provides NO microphone or audio capture capability: the words \"microphone\" and \"audio\" appear nowhere in the specification, and the only selectable source types are MONITOR, WINDOW and VIRTUAL. The PipeWire remote it hands out exposes screen-cast nodes only. Consequently a sandboxed (Flatpak) lecture-transcription app cannot capture microphone audio through the ScreenCast portal — it must obtain audio nodes by some other route (e.g. the separate Camera/RemoteDesktop portals or direct PipeWire access).",
+    "importance": "central",
+    "quote": "\"1: MONITOR: Share existing monitors\" ... \"2: WINDOW: Share application windows\" ... \"4: VIRTUAL: Extend with new virtual monitor\" ... \"Only the screen cast stream nodes will be available from this PipeWire node.\""
+   },
+   {
+    "claim": "In the current ScreenCast interface (version 6, the version documented on the official xdg-desktop-portal site), the PipeWire node ID returned in the `streams` tuple is deprecated as a way to target a capture stream; implementers must use the new `pipewire-serial` stream property together with `PW_KEY_TARGET_OBJECT`, because node IDs can be reused after a node is destroyed. Backends must still populate the node ID for older clients. This sets the minimum API level any 2026 PipeWire-capturing desktop app must implement against GNOME 50's portal stack.",
+    "importance": "central",
+    "quote": "Since version 6 of this interface, the node ID in the stream tuple is deprecated for stream targeting. ... Consumers should prefer the `pipewire-serial` property and `PW_KEY_TARGET_OBJECT` for connecting to streams ... Backends must continue to populate the node ID for compatibility with clients that do not support version 6."
+   },
+   {
+    "claim": "A sandboxed app reaches PipeWire through the portal, never through a raw PipeWire socket: the portal returns a file descriptor to a restricted PipeWire remote that the client passes to `pw_context_connect_fd` to build a `pw_core`. This fd-passing mechanism is the only sanctioned PipeWire entry point for a Flatpak capture app.",
+    "importance": "supporting",
+    "quote": "Open a file descriptor to the PipeWire remote where the screen cast streams are available. ... The file descriptor should be used to create a `pw_core` object, by using `pw_context_connect_fd`."
+   },
+   {
+    "claim": "Portal-enforced capture permissions can be made persistent so a user is not forced to re-approve source selection on every run: `persist_mode` (0 = do not persist, 1 = persists while the app runs, 2 = persists until explicitly revoked) combined with `restore_token`, whose tokens are single-use and rotate — each session start returns a fresh token. This is the mechanism a lecture-transcription app would need to avoid a consent dialog on every launch.",
+    "importance": "supporting",
+    "quote": "Screen cast sessions can be made persistent so that the user does not need to re-select sources every time. ... Restore tokens are single-use: each new session must use the token from the previous one. ... \"1: Permissions persist as long as the application is running\" ... \"2: Permissions persist until explicitly revoked\""
+   },
+   {
+    "claim": "The ScreenCast interface itself contains no sandbox, Flatpak, talk-name or app-identity policy text, and no `Record`/`Stop` methods — the security boundary is enforced by the portal backend at runtime via a user-facing selection dialog, not by the D-Bus interface contract. The interface also explicitly routes persistent remote-desktop capture to a different portal.",
+    "importance": "supporting",
+    "quote": "This will typically result the portal presenting a dialog letting the user do the selection set up by `SelectSources()`. ... Persistent remote desktop screen cast sessions can only be handled via the `Remote Desktop` interface. ... An application may only attempt to select sources once per session. ... An application can only attempt start a session once."
+   }
+  ]
+ }
+]

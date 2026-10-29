@@ -1,0 +1,36 @@
+// Riproduzione del crash del portal RemoteDesktop su questa macchina
+// (2026-10-29). Il test e' stato rifatto due volte; il risultato e' identico.
+
+$ systemctl --user is-active xdg-desktop-portal.service
+active
+
+$ gdbus call --session --dest org.freedesktop.portal.Desktop \
+    --object-path /org/freedesktop/portal/desktop \
+    --method org.freedesktop.portal.RemoteDesktop.CreateSession \
+    "{'handle_token': <'probe2'>}"
+Error: GDBus.Error:org.freedesktop.DBus.Error.NoReply: Remote peer disconnected
+
+$ systemctl --user is-active xdg-desktop-portal.service
+failed
+
+$ journalctl --user --since "2 min ago" --no-pager | grep -E "ERROR:|assertion|Bail"
+xdg-desktop-portal:ERROR:../src/xdp-session.c:296:xdp_session_initable_init:
+  assertion failed: (session->token != NULL)
+Bail out! xdg-desktop-portal:ERROR:../src/xdp-session.c:296:xdp_session_initable_init:
+  assertion failed: (session->token != NULL)
+
+// Controllo: GlobalShortcuts funziona (stesso portal, interfaccia diversa)
+$ gdbus call --session --dest org.freedesktop.portal.Desktop \
+    --object-path /org/freedesktop/portal/desktop \
+    --method org.freedesktop.portal.GlobalShortcuts.CreateSession \
+    "{'handle_token': <'probe3'>}"
+Error: GDBus.Error:org.freedesktop.portal.Error.NotAllowed: An app id is required
+$ systemctl --user is-active xdg-desktop-portal.service
+active
+
+// Versioni in gioco
+xdg-desktop-portal       1.22.1-1.fc44
+xdg-desktop-portal-gnome 50.0-1.fc44
+gnome-remote-desktop      50.2-1.fc44
+libei                     1.6.0-2.fc44
+mutter/shell              50.6-1.fc44

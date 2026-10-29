@@ -13,6 +13,11 @@ docs/analisi-fattibilita.md):
   un'entry GTK viva);
 * l'API UNO scrive in LibreOffice Writer in modo ancorato al cursore
   (verificato: ``insertString`` su un documento swriter);
+* il portal ``RemoteDesktop`` espone ``NotifyKeyboardKeysym`` (usata da
+  Vocalinux per scrivere in Wayland senza uinput), ma su questa macchina
+  ``RemoteDesktop.CreateSession`` **abbatte il daemon xdg-desktop-portal**
+  (assertion in xdp-session.c:296) — non e' una via percorribile qui
+  (ricrea: research/portal-remotedesktop-crash.txt);
 * non esiste alcun portal di input-injection: ogni via scrive globalmente
   sulla superficie che ha il focus.
 
