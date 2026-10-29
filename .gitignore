@@ -1,0 +1,35 @@
+# Ambienti virtuali: non si versionano. Vengono creati da install.sh
+# (o da scripts/ensure-venv.sh) sulla macchina di destinazione.
+.venv/
+venv/
+
+# I modelli Whisper sono ~1,6 GB e si scaricano da Hugging Face al primo
+# avvio. Versionarli gonfierebbe il repo di ordini di grandezza.
+models/*
+!models/.gitkeep
+
+# Cache di Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Artefatti della libreria huggingface-hub / xet: scrivono un elenco di
+# agenti AI dentro la cartella del modello. Non è roba nostra.
+.agent_harnesses.json
+CACHEDIR.TAG
+
+# Dati dell'utente: trascrizioni, sessioni, correzioni, dizionari.
+# Sono generati a runtime e contengono testo dell'utente: non appartengono
+# al repository.
+*.db
+*.db-wal
+*.db-shm
+*.json.bak
+
+# File temporanei degli editor e del sistema
+*.swp
+*~
+.DS_Store

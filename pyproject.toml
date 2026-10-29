@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lecture-transcriber"
+version = "0.1.0"
+description = "Trascrizione locale delle lezioni per GNOME/Wayland"
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "Lecture Transcriber" }]
+keywords = ["whisper", "trascrizione", "didattica", "wayland", "gnome"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: GNOME",
+    "Intended Audience :: Education",
+    "Natural Language :: Italian",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+# Le dipendenze runtime sono dichiarate in scripts/install.sh; qui non se ne
+# aggiungono di nuove.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/neokov/lecture-transcriber"
+Repository = "https://github.com/neokov/lecture-transcriber"
+Issues = "https://github.com/neokov/lecture-transcriber/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+# ``tests`` e' gia' in sys.path tramite tests/_bootstrap.py: pytest lo mette
+# in rootdir con ``prepend`` (default), quindi i moduli ``test_*`` sono
+# importabili come ``test_asr``, ``test_sessions`` e cosi' via.
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra --strict-markers"
+# Il pacchetto vive in src/: lo si rende importabile senza installare.
+pythonpath = ["src", "tests"]
+filterwarnings = ["ignore::DeprecationWarning:gi.*"]

@@ -1,0 +1,75 @@
+==========================================================
+ Environment
+==========================================================
+
+--- versions
+  Fedora Linux 44 (Workstation Edition)
+  mutter=mutter-50.6 gnome-shell=gnome-shell
+  xdg-desktop-portal=xdg-desktop portal-gnome=xdg-desktop
+  session=wayland/GNOME
+
+==========================================================
+ Wayland / GNOME 50
+==========================================================
+
+--- wlr-virtual-keyboard globals exported by mutter
+CONFIRMED  CLAIM HOLDS: mutter exports NO wlr-virtual-keyboard global -> wtype cannot attach
+
+--- wlr-layer-shell support in mutter
+CONFIRMED  CLAIM HOLDS: mutter does NOT implement wlr-layer-shell -> gtk4-layer-shell cannot govern stacking
+
+--- GlobalShortcuts portal provider present
+CONFIRMED  gnome-control-center-global-shortcuts-provider IS installed and executable
+
+--- xdotool/ydotool/wtype/wl-clipboard presence
+  ydotool              (absent)
+  ydotoold             (absent)
+  wtype                (absent)
+  wl-copy              /usr/bin/wl-copy
+  wl-paste             /usr/bin/wl-paste
+  at-spi2-registryd    (absent)
+
+--- /dev/uinput accessibility (ydotool prerequisite)
+  crw------- root:root
+CONFIRMED  CLAIM HOLDS: /dev/uinput is root-owned and user not in 'input' group -> ydotool needs a udev rule + usermod
+
+==========================================================
+ Audio / PipeWire
+==========================================================
+
+--- pipewire services
+  pipewire         active
+  pipewire-pulse   active
+  wireplumber      active
+
+--- capture sources
+55	alsa_input.pci-0000_0e_00.6.analog-stereo	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+
+--- python module availability (the two-Python pitfall)
+  gi             py3.13=no  py3.14=OK
+  sounddevice    py3.13=no  py3.14=no
+  pyaudio        py3.13=no  py3.14=OK
+  numpy          py3.13=no  py3.14=OK
+  soxr           py3.13=no  py3.14=no
+
+==========================================================
+ Text insertion paths
+==========================================================
+
+--- python3.14 has Atspi + LibreOffice UNO bindings
+  Atspi: OK
+  UNO  : OK
+
+--- live at-spi text injection into a GTK entry
+CONFIRMED  at-spi insert_text() wrote into a live GTK entry: INJECTED_OK before='PROBE-ATSPIPROBE-ATSPI' after='PROBE-ATSPIPROBE-ATSPIPROBE-ATSPI'
+
+==========================================================
+ Packaging
+==========================================================
+
+--- flatpak / rpm tooling
+  flatpak=/usr/bin/flatpak rpm-build=(absent)
+
+==========================================================
+ done
+==========================================================

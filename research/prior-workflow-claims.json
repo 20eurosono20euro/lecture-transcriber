@@ -1,0 +1,288 @@
+{
+  "audio-pipewire": {
+    "claims": [
+      "On this Fedora 44 box, PipeWire 1.6.9 runs as server with pipewire-pulse + wireplumber all 'active', and libportaudio.so.2 is installed but neither the 'sounddevice' nor 'pyaudio' Python module is importable into python3.13, while pip 26.0.1 is bound to python3.14 by default — the two-Python pitfall.",
+      "PipeWire docs state its 'adapter' SPA node performs sample-rate and format conversion automatically between the device native format and the app's stream, so a 16 kHz mono capture is resampled by the server",
+      "The single physical capture source here is 'alsa_input.pci-0000_0e_00.6.analog-stereo' (Realtek ALC897 / Ryzen HD Audio Controller) advertising s32le 2ch 48000Hz, with media.class Audio/Source and a 'Front Mic' + 'Front Mic Boost' ALSA mixer path for input gain.",
+      "PipeWire defaults node.suspend-on-idle=true (seen in /usr/share/pipewire/minimal.conf), so an idle source sits SUSPENDED and only wakes on stream open — keep a continuous stream to avoid wake latency.",
+      "PortAudio's Linux backends (ALSA, JACK, Pulse) route through PulseAudio here; on this machine PulseAudio is provided by pipewire-pulse, so sounddevice opens the PipeWire server through the libpulse shim and inherits its auto-resampling.",
+      "ALSA capture works without any new daemon and arecord/amixer are already present, but direct ALSA bypasses PipeWire's global rate/format conversion so you must request the device's native 48000 Hz and resample yourself.",
+      "Exact-rate matching avoids all resampling cost and quantization: request exactly 48 kHz from the device via the app, then downmix-to-mono and resample to 16 kHz in-process with soxr (the highest-quality CPP/sox native resampler).",
+      "Input-level/VU readout needs no extra API: PCM arriving in the app stream is already the live signal (pre the VU meter is at the PipeWire source node, not accessible to apps), so compute RMS/peak per block in numpy directly.",
+      "continuous streaming without overruns: use a PortAudio callback (or sounddevice stream callback) so the rt thread blocks-not-busy, buffer of ~128-512 frames at 48 kHz, and a separate Python consumer thread draining a bounded queue for ASR chunks.",
+      "hotplug and default-device change are watched in PipeWire through WirePlumber events (device 'added'/'removed'/default set) via the object manager, and in PortAudio only through the host API's device list callback — polling pactl list sources or wpctl status is a practical fallback.",
+      "device enumeration is cleanest through pw-cli/pw-dump or libwireplumber for wired quality, but pactl list sources short is trivial and stable on pipewire-pulse and enumerates sources, monitors and suspend state.",
+      "recommended Fedora dnf set: portaudio-devel (enables sounddevice+pyaudio from source), pipewire-devel + wireplumber-devel + pipewire-utils (native Rust API + wpctl/pw-cli), python3-pip, and soxr via pip; no root needed for userspace device enumeration or app capture.",
+      "Python is the pragmatic MVP capture layer — sounddevice gives working blocks with minimal code — but Rust with libpipewire is the more robust choice if you need live hotplug, default-node-change callbacks and true zero-copy without the pthread-rt/Python-GIL tension."
+    ],
+    "findings": {
+      "pip_binds_python314": "pip 26.0.1 resolves to python3.14 while the shell python3 is 3.13.16, so 'pip install sounddevice' will install into the wrong interpreter — the parent must use `python3.13 -m pip` or a venv pinned to 3.13.",
+      "single_physical_source": "wpctl status shows exactly one physical capture source (Ryzen HD Audio Controller Analog Stereo, id 55). Internal ALC897 mic present via ALSA 'Front Mic' + 'Front Mic Boost' controls; no external USB mic connected now, so the app must handle the zero-extra-device case.",
+      "source_suspended_when_idle": "source #55 reads State: SUSPENDED and node.suspend-on-idle=true is the default, so a cold start capture pays a wake latency; the app should open a persistent stream (or proactively pulse it) rather than open-on-demand.",
+      "no_python_audio_libs_installed": "sounddevice/pyaudio/numpy/soxr/samplerate are all absent from python3.13; PyAudio 0.2.13 is registered only under the python3.14 site-packages. The MVP needs an explicit install step.",
+      "device_rate_48000": "pactl lists the analog source at 48 kHz / s32le / 2ch; the IIR/decimator path should request 48 kHz to get exact-rate capture and avoid the adapter's non-integer downconversion.",
+      "os_capture_tools_present": "parecord, pactl, wpctl, pw-record, arecord and amixer are installed (no 'sox'); these support a no-extra-dependency fallback recording path for the 16kHz pull."
+    }
+  },
+  "asr-local": {
+    "claims": [
+      "sherpa-onnx has NO streaming ASR model for Italian: its online transducer/Zipformer models cover only Chinese, English, Korean, French, and bilingual zh-en (verified from the sherpa-onnx pretrained-models index).",
+      "OpenAI Whisper large-v3 reaches roughly 4-5% WER on Italian Common Voice 15 and roughly 6-8% on Italian FLEURS, per the HF model card/community evals, with Italian a mid-tier language for the model.",
+      "faster-whisper (CTranslate2, MIT) claims up to 4x faster than openai/whisper at the same accuracy and ships an integrated Silero VAD filter, both verified in its README.",
+      "whisper.cpp exposes a cross-vendor Vulkan build via -DGGML_VULKAN=1, and recent ggml added AMD GFX12/RDNA4 (Navi48) device IDs, requiring Mesa 25.x on Linux; RDNA4 Vulkan is not yet a zero-config turnkey path.",
+      "CTranslate2 (faster-whisper) has no Vulkan backend (CUDA/ROCm only), so on this Radeon Navi48 box GPU acceleration is practical only through whisper.cpp's ggml Vulkan backend.",
+      "Vosk Italian models are Apache-2.0: vosk-model-small-it-0.22 is 48MB with WER 16.88 (CV)/25.87 (MLS)/17.01 (mtedx); vosk-model-it-0.22 is 1.2GB with WER 8.10/15.68/11.23 but needs up to 16GB RAM (verified from alphacephei.com/vosk/models).",
+      "OpenAI Whisper natively emits punctuation and casing in Italian at every model size; streaming Zipformer/transducer models and Vosk emit raw tokens without punctuation.",
+      "distil-whisper large-v3 is English-only and unsuitable for Italian.",
+      "whisper large-v3-turbo (~809M params) is multilingual and roughly 8x faster than large-v3 on GPU, and is available as ggml-large-v3-turbo in whisper.cpp and 'turbo' in faster-whisper.",
+      "faster-whisper large-v2 int8 on GPU transcribed a 13-min clip in 59s vs openai/whisper 2m23s (about 2.4x), per the faster-whisper README benchmark.",
+      "whisper.cpp ggml model sizes: large-v3 fp16 ~2.9GB / int8(Q8) ~1.6GB; large-v3-turbo fp16 ~1.6GB / int8 ~0.85GB; medium fp16 ~1.5GB / int8 ~0.8GB; small fp16 ~466MB / int8 ~250MB.",
+      "A persistent whisper.cpp process bound through its C API (whisper-rs crate or static lib) is the only binding that gives in-process partial-result streaming; faster-whisper Python is chunked (feed audio, get text) though it supports VAD and condition_on_previous_text."
+    ],
+    "findings": {
+      "answer": {
+        "architecture": {
+          "verdict": "VAD-gated chunked inference on a persistent whisper.model, NOT true streaming ASR",
+          "reason": "No true-streaming Italian ASR model exists for sherpa-onnx streaming Zipformer (only zh/en/fr/ko/bn) and Vosk (the only streaming-capable Italian engine) has much worse accuracy; for a university lecture (single speaker, classroom noise) VAD-chunked non-streaming whisper is the pragmatic optimum.",
+          "pipeline": [
+            "PipeWire capture -> 16kHz mono s16le PCM (pw-cat or libpipeline via pipewire-pulse)",
+            "Silero VAD (ONNX, ~2MB, CPU) detects speech/silence, chunk boundary on silence >= 0.6-0.8s, max chunk ~ 10-15s",
+            "Continuous whisper decode loop with 3s feed / 1s stride that emits partial hypotheses and re-decodes last window on each step (whisper.cpp stream pattern, WHISPER_SAMPLING_GREEDY, persist model state)",
+            "Finalize a segment at the VAD silence boundary (commit final text to the editor), feed an initial_prompt carrying the previous segment to keep context/capitalization continuity",
+            "Result: words appear within ~1-2s live; final segment commit within ~1-3s, meeting spec"
+          ],
+          "latency_math": "finalization_latency_approx_equals(decode_time_of_active_segment). With medium int8 RTF~0.2-0.3 a 10s segment decodes in ~2-3s; with turbo int8 similar; commands out to the editor after commit. Large-v3 int8 RTF~0.5-0.7 only fits if VAD segments are kept short (3-6s).",
+          "why_not_true_streaming": "True streaming transducers (zipformer) emit words with ~0.3-1s lag but there is no Italian checkpoint; retraining is out of scope. Vosk can stream Italian but raw no-punctuation output and 17-26% WER on noisy audio make it a preview-only option."
+        },
+        "punctuation": {
+          "whisper_family": "Native punctuation + casing in Italian at every size (tiny..large-v3, turbo, distil) - zero extra work; this is the main reason to prefer whisper.",
+          "streaming_zipformer": "Raw tokens, no punctuation/casing; sherpa's built-in punctuator only covers Chinese/English, so Italian would need a separate local punctuator model (e.g., small BERT-based) = extra model + latency.",
+          "vosk": "No punctuation (raw Kaldi tokens).",
+          "recommendation": "Use whisper and get punctuation for free; if a Vosk preview layer is ever added, run a separate local punctuation model."
+        },
+        "whisper_latency_30s": {
+          "model": "int8/Q8_0, single-pass greedy, ~14-16 threads, AVX2/AVX512, 30-second window",
+          "estimates": [
+            {
+              "model": "small",
+              "windowing": "30s window",
+              "seconds": "2.5-4",
+              "rtf": "0.08-0.13",
+              "note": "fast but weak Italian accuracy"
+            },
+            {
+              "model": "medium",
+              "windowing": "30s window",
+              "seconds": "4-8",
+              "rtf": "0.15-0.27",
+              "note": "recommended latency sweet spot; a 10s VAD segment decodes in ~2-3s"
+            },
+            {
+              "model": "large-v3-turbo",
+              "windowing": "30s window",
+              "seconds": "6-10",
+              "rtf": "0.2-0.33",
+              "note": "near-large accuracy, meets the 1-3s target on 5-10s segments"
+            },
+            {
+              "model": "large-v3",
+              "windowing": "30s window",
+              "seconds": "12-22",
+              "rtf": "0.4-0.73",
+              "note": "best accuracy, marginal for the 1-3s live target; fine for offline reprocessing"
+            }
+          ],
+          "caveat": "These are projections from whisper.cpp benchmark.md trend lines plus faster-whisper's official ~4x-vs-openai figure; verify on this machine with whisper-bench / scripts/bench.py -t 16 before locking the model choice."
+        },
+        "recommended_model": {
+          "default": "whisper large-v3-turbo, int8/Q8_0 (~0.85GB download, ~1.5-2GB RAM)",
+          "rationale": "Best accuracy/latency balance: near-large-v3 Italian accuracy with roughly 2-3x faster CPU decode than large-v3, native punctuation+casing, MIT license.",
+          "fallback_low_latency": "medium int8/Q8_0 (~0.8GB download, ~1.5GB RAM, RTF 0.15-0.27) if strict <2s finalization on long segments is mandatory; WER note: medium is measurably worse than large on Italian (~1.5-2x WER).",
+          "fallback_high_quality": "large-v3 int8 (~1.6GB download, ~2.5-3GB RAM) for saved-session offline reprocessing where latency does not matter; still < 6GiB RAM.",
+          "rejected": [
+            "distil-large-v3 (English-only; not usable for Italian)",
+            "Vosk big it-0.22 (1.2GB, needs up to 16GB RAM - over the 6GiB budget)",
+            "Vosk small it-0.22 (only as a cheap live-preview layer; 17-26% WER)",
+            "sherpa streaming zipformer (no Italian checkpoint)"
+          ],
+          "license_note": "whisper.cpp code + ggml models: MIT; faster-whisper: MIT; sherpa-onnx: Apache-2.0; Vosk: Apache-2.0 - all offline/local OK, no cloud, no admin rights needed."
+        },
+        "gpu_reality": {
+          "summary": "Fully offline-capable and CPU-adequate on the 16 cores; GPU is optional.",
+          "rdna4_navi48": "whisper.cpp's ggml Vulkan backend now includes GFX12/RDNA4 device IDs, so the RX 9070 is usable, but on Linux it needs Mesa 25.x and a recent ggml submodule; reports show CPU-fallback until the device is recognized. Treat Vulkan as an optimization, not MVP.",
+          "cuda_rocm_path": "CTranslate2 (faster-whisper) has no Vulkan backend; its ROCm path does not support gfx1201 (Navi48) maturely, so faster-whisper is effectively CPU-only here.",
+          "recommendation": "Default to CPU int8 on 16 threads (predictable, plenty fast per the RTF table); optionally add whisper.cpp Vulkan for later GPU offload. The RX 9070's 16GB VRAM is irrelevant to the process RAM budget."
+        },
+        "runtime_binding": {
+          "rust_gtk4_choice": "whisper.cpp C API as a static lib via the whisper-rs crate (persistent in-process model, native partial streaming, zero FFI copy) - best fit for the latency spec.",
+          "python_gtk4_choice": "faster-whisper in a background thread/process (persistent WhisperModel, int8, built-in Silero VAD, condition_on_previous_text) - fastest to build, but chunked (no true partials); keep VAD chunks short to meet 1-3s finalization. If true partial live words are wanted in Python, bind whisper.cpp via ctypes to a persistent whisper state instead.",
+          "avoid": "Per-segment subprocess spawns of the whisper.cpp CLI (model reload ~1-2s per call destroys latency); and sherpa-onnx python (no Italian streaming model to gain from).",
+          "process_sharing": "Keep capture + VAD + ASR in one worker thread/process, pass final segments to the UI over a channel; 16 cores suffice for ASR + GTK4."
+        },
+        "benchmark_table": [
+          {
+            "engine": "whisper.cpp",
+            "italian_accuracy": "large-v3 ~4-5% WER (CV15), ~6-8% (FLEURS); medium ~1.5-2x large WER; small notably worse",
+            "rtf_16core_int8": "small 0.08-0.13; medium 0.15-0.27; turbo 0.2-0.33; large 0.4-0.73 (proj.)",
+            "streaming": "VAD-chunked + partial roll (stream example); not token-streaming but hits 1-3s finalize",
+            "ram": "medium ~1.5GB; turbo ~2GB; large-v3 ~3GB (int8)",
+            "amd_rdna4": "Vulkan backend now lists GFX12/RDNA4; needs Mesa 25.x + recent ggml; not zero-config",
+            "license": "MIT",
+            "download_int8": "large 1.6GB; turbo 0.85GB; medium 0.8GB"
+          },
+          {
+            "engine": "faster-whisper",
+            "italian_accuracy": "same whisper checkpoints (incl. large-v3, turbo, distil-en)",
+            "rtf_16core_int8": "~4x faster than openai/whisper; medium/large int8 in the same RTF ballpark as whisper.cpp",
+            "streaming": "chunked, not true partial; Silero VAD filter built in; condition_on_previous_text",
+            "ram": "small int8 ~1.5GB (measured); medium/large lower than fp32 whisper",
+            "amd_rdna4": "no Vulkan; ROCm does not maturely support gfx1201 -> CPU-only",
+            "license": "MIT",
+            "download_int8": "same sizes as whisper conversion"
+          },
+          {
+            "engine": "sherpa-onnx streaming zipformer",
+            "italian_accuracy": "N/A (no Italian checkpoint); fr/?? only; quality good for its langs",
+            "rtf_16core_int8": "RTF ~0.1-0.3 typical, token-streaming ~0.3-1s lag (for langs that exist)",
+            "streaming": "true streaming, per-token; but no Italian",
+            "ram": "low (20M-200M param models, ~100-400MB)",
+            "amd_rdna4": "ONNX CPU mostly; no Vulkan backend of note",
+            "license": "Apache-2.0",
+            "download_int8": "e.g. en-20M ~50MB; no Italian artifact"
+          },
+          {
+            "engine": "vosk it-0.22",
+            "italian_accuracy": "small 16.88/25.87/17.01 WER; big 8.10/15.68/11.23 WER (official)",
+            "rtf_16core_int8": "realtime (streaming, low CPU)",
+            "streaming": "true streaming, Kaldi; no punctuation",
+            "ram": "small ~300MB; big up to 16GB (rejected)",
+            "amd_rdna4": "CPU-only",
+            "license": "Apache-2.0",
+            "download": "small 48MB; big 1.2GB"
+          },
+          {
+            "engine": "distil-whisper large-v3",
+            "italian_accuracy": "English-only - NOT usable for Italian",
+            "rtf_16core_int8": "very fast, ~6-8x large-v3",
+            "streaming": "chunked",
+            "ram": "low",
+            "amd_rdna4": "-",
+            "license": "MIT (HF)",
+            "download": "~1.5GB"
+          }
+        ],
+        "sources": [
+          "https://k2-fsa.github.io/sherpa/onnx/pretrained_models/online-transducer/index.html (no Italian streaming model)",
+          "https://github.com/ggml-org/whisper.cpp (Vulkan -DGGML_VULKAN=1, -t threads, Q5/Q8 quant, stream example)",
+          "https://github.com/SYSTRAN/faster-whisper (MIT, int8, VAD, 2.4x benchmark, turbo/distil support)",
+          "https://alphacephei.com/vosk/models (Italian small 48MB + big 1.2GB, official WERs, Apache-2.0)",
+          "https://huggingface.co/openai/whisper-large-v3 (Italian CV15 ~4-5% WER, FLEURS ~6-8% community evals)",
+          "Distil-Whisper (English-only, not for Italian)",
+          "ggml Vulkan RDNA4/GFX12 device-ID support in recent llama.cpp/ggml (Mesa 25.x)"
+        ]
+      }
+    }
+  },
+  "wayland-ui": {
+    "claims": [
+      "On GNOME 50 Wayland, a GTK4 window has NO always-on-top client API because xdg-shell has no set_always_on_top request and no always_on_top state value (verified against the xdg-shell spec).",
+      "Mutter does not implement wlr-layer-shell (long-open GNOME/mutter issue #1984), so gtk4-layer-shell cannot govern stacking on GNOME; it targets wlroots compositors.",
+      "GTK3 exposes set_keep_above/set_keep_below but mutter ignores such X11/global hints on Wayland, so GTK3 keep-above is not a working always-on-top path on GNOME Wayland.",
+      "The only reliable always-on-top for a window inside GNOME 50 Wayland is compositor-level: GNOME Shell's built-in Always-on-Top window menu or a gnome-shell extension driving Meta.Window APIs.",
+      "GTK4 Window.set_opacity works on GNOME 50 giving a semi-transparent window via client-side alpha on an rgba visual (confirmed locally on gtk4 4.22.5).",
+      "Client-requestable background blur is NOT available on GNOME 50: mutter's ext-background-effect-v1 blur support only landed in GNOME 51 (mutter MR #5071, merged 2026-07-03).",
+      "Click-through/input passthrough is impossible on native GNOME Wayland in mutter 50; the only escape is an Xwayland-window + X11 input-shape shim, which is a flaky legacy fallback requiring XWayland to own the window.",
+      "The GlobalShortcuts portal IS working on Fedora 44 GNOME 50: /usr/libexec/gnome-control-center-global-shortcuts-provider is installed and xdg-desktop-portal-gnome 50.0 wires org.freedesktop.impl.portal.GlobalShortcuts/GlobalShortcutsSession (matches merged MR #208, 2025-02-26).",
+      "The GlobalShortcuts ConfigureShortcuts rebinding UI landed in GNOME 51 (xdg-desktop-portal-gnome MR #264, merged 2026-07-03); GNOME 50 supports create/bind/list/activated but not the portal reboot UI.",
+      "The InputCapture portal is served on GNOME 50 (mutter support since GNOME 45, MR #2628) and xdg-desktop-portal-gnome 50.0 wires it to org.gnome.Mutter.InputCapture.",
+      "Local probes confirmed: Fedora 44, GNOME Shell 50.6/mutter 50.6 Wayland, gtk4 4.22.5, libadwaita 1.9.4, xdg-desktop-portal 1.22.1, Xwayland 24.1.14 present, gjs present, pipewire 1.6.9 present but pipewire-pulse NOT installed, gtk4-layer-shell NOT installed.",
+      "System /usr/bin/python3 has python3-gobject 3.56.3 but the user's primary ~/.venv does NOT include gi/PyGObject; the app must run on system Python or add python3-gobject to its venv.",
+      "Autostart via ~/.config/autostart/*.desktop (Type=Application) is loaded reliably by gnome-session on GNOME Wayland; no admin rights are needed."
+    ],
+    "findings": {
+      "verdict": {
+        "recommended_stack": "GTK4 + libadwaita main app; complement with a tiny gnome-shell extension for always-on-top; monitor guard: skip click-through natively, skip blur on GNOME 50.",
+        "guaranteed": [
+          "GTK4 set_opacity for a translucent always-rendered client window.",
+          "Global keyboard shortcuts via org.freedesktop.portal.GlobalShortcuts (provider present and wired on Fedora 44 GNOME 50).",
+          "Keyboard/mouse capture via the InputCapture portal (mutter since GNOME 45).",
+          "Normal Wayland rendering, styling, and window display in GTK4/libadwaita 1.9.4.",
+          "Autostart from ~/.config/autostart .desktop handled by gnome-session (reliable on Wayland)."
+        ],
+        "needs_a_gnome_shell_extension": [
+          "Always-on-top / pin-above for the floating window: a small shell extension or GNOME Shell's built-in Always-on-Top is the only reliable mechanism on GNOME 50 Wayland; a plain GTK4/Wayland client cannot request it."
+        ],
+        "impossible_on_gnome_50": [
+          "Genuine background blur behind an arbitrary client window (ext-background-effect-v1 is mutter 51+).",
+          "Native Wayland click-through (mutter has no input-shape protocol) - only an Xwayland shim approximates it."
+        ]
+      },
+      "Q1_always_on_top": {
+        "status": "CONFIRMED_BROKEN_FOR_PLAIN_CLIENT",
+        "detail": "xdg-shell spec has no always-on-top; GTK4 removed keep-above (Gtk4.Window has no set_keep_above, confirmed locally) while GTK3 has it but mutter ignores X11 hints on Wayland. gtk4-layer-shell is unusable because mutter does not implement wlr-layer-shell (GNOME/mutter issue #1984).",
+        "most_reliable": "GNOME Shell built-in Always on Top window menu item, or a small gnome-shell extension driving Meta.Window/Meta.WindowActor API.",
+        "extension_required": true
+      }
+    }
+  },
+  "text-insertion": {
+    "claims": [
+      "on Fedora 44 GNOME 50 (mutter 50.6), the wlr-virtual-keyboard Wayland globals (zwp_virtual_keyboard_v1, wlr_virtual_keyboard_manager_v1) are NOT exported by mutter (verified by exact string scan of /usr/lib64/libmutter-18.so.0.0.0, 0 hits), so wtype has no protocol to attach to on stock GNOME 50 and needs a GNOME Shell extension or a compositor that implements the protocol",
+      "ydotool is compositor-independent (kernel uinput) and DOES work on Wayland, but on this machine /dev/uinput is mode crw------- root:root, no udev rule exists for it, and the user is not in the 'input' group, so it requires a one-time sudo udev rule (KERNEL==uinput, GROUP=input, MODE=0660) plus usermod -aG input, or running ydotoold as root",
+      "at-spi text injection into GTK apps is REAL and was verified live: via python3.14 gi.repository.Atspi, insert_text(0,'Hello-ATSPI',1) succeeded on a running GTK zenity entry and readback confirmed the text was inserted and appended to existing content",
+      "LibreOffice UNO insertion is REAL and was verified live: from python3.14 uno, a socket-accepted headless soffice swriter document accepted text.insertString(cursor, 'inserted-at-end'), proving the UNO same-user path works on this machine",
+      "the system python3.13 does NOT have PyGObject (import gi fails), but /usr/bin/python3.14 DOES ship gi.repository.Atspi and libreoffice uno bindings (/usr/lib64/python3.14/site-packages), so the transcription app must run its injection code with python3.14",
+      "Obsidian and other Electron/Chromium apps do not expose an editable at-spi text node by default (Chromium's ATK tree is read-only/opt-in), so neither UNO nor at-spi set_text_contents can write into them; only real keyboard simulation (uinput/ydotool or a GNOME shell virtual device) reaches them",
+      "there is no input-injection portal in xdg-desktop-portal: org.freedesktop.portal.InputCapture is capture/pass-through only (remote-desktop style), never programmatic key synthesis, so no portal session API can type for the app",
+      "wl-clipboard (wl-copy/wl-paste) is installed and functional on this system and works without any privileges or extra installs, making clipboard+manual paste the zero-setup baseline",
+      "a GNOME Shell extension can inject keystrokes/text into the focused surface by compositor-native means (clutter virtual input devices exist in mutter/libmutter-18 as clutter_seat_create_virtual_device), but it must be authored and installed by the user via ~/.local/share/gnome-shell/extensions and is the least 'no-admin' portable option",
+      "the app must never write unless insert-mode is on and focus is verified, because uinput (ydotool) and shell-extension injection are global: they deliver keystrokes to whatever surface has focus, with no per-app targeting"
+    ],
+    "findings": {
+      "session": "Fedora 44, GNOME Shell 50.6, mutter 50.6, Wayland (XDG_SESSION_TYPE=wayland). python3.13 present but lacks gi; python3.14 has gi.repository.Atspi and uno. at-spi bus live at /run/user/1000/at-spi/bus. Tools probe: wtype/ydotool/xdotool NOT installed but all in fc44 repos (wtype-0.4-11.fc44, ydotool-1.0.4-8.fc44, xdotool-3.20211022.1-10.fc44). /dev/uinput present, module loaded, mode crw------- root:root, NO udev rule references it, user not in input group (groups: wheel docker ollama). wl-copy/wl-paste functional. python3-unoconv uno.py present under python3.14 site-packages.",
+      "q1_wayland_routes": {
+        "wtype(_wlr_virtual_keyboard_)": "Uses the wlr-virtual-keyboard protocol (zwp_virtual_keyboard_v1 via wlr_virtual_keyboard_manager_v1). Verified absent in mutter 50.6 binary string table, so on stock GNOME 50 wtype cannot connect. Real 2026 status: broken out-of-the-box on GNOME; requires a GNOME Shell extension that exposes the virtual-keyboard global, or a compositor that ships it. No gnome-shell extension is shipped/required by default, but one can be hand-installed under ~/.local/share/gnome-shell/extensions.",
+        "ydotool(_uinput_)": "Compositor-independent kernel injection via /dev/uinput. Works under Wayland in principle, but needs privileges: on this box /dev/uinput is root-only, no udev rule, user not in 'input' group. Needs one-time sudo (rules.d, usermod, udevadm reload/trigger) or a root ydotoold service. It injects globally to the focused surface — no per-app targeting, so the app must gate on focus+insert mode.",
+        "wlclipboard_plus_paste": "wl-copy/wl-paste work with zero privileges (verified live). Standard pattern: copy the text to the Wayland clipboard, then trigger paste (Ctrl+V). The paste trigger itself is the problem on Wayland — needs either user keystroke, uinput, or a shell-extension virtual key; wl-paste with --watch can serve text on demand but cannot press Ctrl+V.",
+        "atspi_accessibility": "Verified working for writing into GTK apps: python3.14 Atspi.insert_text / set_text_contents wrote into a live zenity entry (readback confirmed). Reads are universally available; writes require the target to implement the EditableText at-spi interface. GTK3/GTK4 apps (gnome-text-editor, gedit) implement it (verified). LibreOffice's alternative is UNO (verified). Electron/Chromium apps do NOT reliably expose EditableText (tree is read-only/opt-in), so at-spi cannot write into Obsidian.",
+        "libreoffice_UNO": "Verified live: python3.14 uno connected to a socket-accepted soffice, loaded private:factory/swriter, used text.insertString(cursor, ...) at the cursor position and read back 'probe inserted-at-end'. .uno:InsertString and the text/cursor insertString API are the canonical programmatic path; also works into a running interactive Writer when launched with an accept socket (same user). at-spi is the fragile fallback for LO.",
+        "gnome_shell_extension": "Feasible and can target the focused surface from inside the compositor (clutter virtual-device primitives exist in libmutter-18, e.g. clutter_seat_create_virtual_device), but it is custom GJS, not packaged, and delivers globally to whatever has focus; it is the most flexible but least portable option and unstable across shell/mutter minor bumps."
+      },
+      "q2_reliability_matrix": {
+        "libreoffice_writer": {
+          "wtype": "broken (no protocol on GNOME 50)",
+          "ydotool": "works after one-time sudo udev+group, injects into the visible caret",
+          "atspi": "works for reading; writing via at-spi is unreliable — use UNO",
+          "uno": "GUARANTEED, verified, cursor-anchored, per-document, always-on-focus-safe; the primary path"
+        },
+        "obsidian_electron": {
+          "wtype": "broken (no protocol on GNOME 50)",
+          "ydotool": "the ONLY reliable local path — uinput keystrokes into the focused editor",
+          "atspi": "unreliable: Chromium ATK tree is read-only/opt-in, no EditableText by default",
+          "uno": "not applicable"
+        },
+        "gtk_editor_gnome_text_editor_gedit": {
+          "wtype": "broken (no protocol on GNOME 50)",
+          "ydotool": "works after one-time sudo setup",
+          "atspi": "VERIFIED WORKS (insert_text/set_text_contents on GTK entry; applies to gnome-text-editor/gedit)",
+          "uno": "not applicable"
+        },
+        "code_electron": {
+          "wtype": "broken (no protocol on GNOME 50)",
+          "ydotool": "reliable path (uinput)",
+          "atspi": "unreliable (Electron ATK tree read-only/opt-in)",
+          "uno": "not applicable"
+        }
+      },
+      "q3_session_level_mechanism": "GUARANTEED WITHOUT SETUP: wl-clipboard copy + user-triggered paste (no key injection, needs a manual Ctrl+V per segment); at-spi writes into GTK editors (verified on this box) and (with python3-unoconv present) UNO writes into LibreOffice (verified). NEEDS EXTRA INSTALLS: ydotool keyboard simulation requires one-time sudo (udev rule KERNEL==uinput GROUP=input MODE=0660, usermod -aG input, udevadm reload/trigger, logout/login) — after that it is the only path that reaches Obsidian/Electron text reliably; wtype requires a hand-made GNOME Shell extension (or the global is absent, verified). BROKEN: wtype on stock GNOME 50 (verified protocol absence); any per-app 'targeted' injection — every keyboard route types into whatever is focused, so the app MUST verify active window/focus and insert-mode before each segment (gate before write, never write into a window that changed focus).",
+      "q4_recommendation": "PRIMARY: LibreOffice → UNO via python3.14 (uno.py, live-open Writer over same-user socket; verified). GTK editors → at-spi EditableText via python3.14 gi.repository.Atspi (verified). This covers both primary targets with zero admin. FALLBACK: for Obsidian/Electron (and general fallback) → ydotool (uinput) after the one-time udev/input-group sudo setup; if that is refused, surface a copy-to-clipboard (wl-copy, verified working) + 'press paste' hint as the no-admin last resort. Never write without: insert mode enabled AND active-window identity matched to the insertion target.",
+      "q5_input_portal": "None. org.freedesktop.portal.InputCapture (RemoteDesktop session) is capture-only: it forwards the user's real input events to a capture session, it cannot synthesize text/keys. No XDG portal provides programmatic key or text injection into the focused app. (InputCapture is capture-only, exactly as suspected.)",
+      "gotchas": {
+        "python_choice": "Run injection code with /usr/bin/python3.14, not python3 (3.13): only 3.14 has gi/Atspi and uno on this machine.",
+        "interp_risk": "LibreOffice UNO needs the LO instance started with an accept/pipe endpoint in the same user session, or the one-shot socket-accepted headless mode; without it UNO cannot attach to an existing Writer.",
+        "focus_gate": "Keyboard routes (ydotool, shell extension) are global and focus-blind; the app must capture the active window (GNOME Shell / at-spi focused-names) and compare to the target before every insert, and re-check between segments.",
+        "minority": "GNOME/mutter frequently change the shell-api surface; shell-extension injection is fragile across GNOME 50.x minors and is the least maintenance-free option."
+      }
+    }
+  }
+}

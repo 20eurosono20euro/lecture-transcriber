@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Lecture Transcriber
+Name[it]=Trascrizione Lezioni
+GenericName=Trascrizione lezioni
+Comment=Trascrizione locale delle lezioni con Whisper
+Comment[it]=Trascrive la lezione sul computer, in locale, con Whisper
+Exec=lecture-transcriber
+Icon=audio-input-microphone
+Terminal=false
+Categories=Education;
+Keywords=transcription;whisper;lecture;notes;
+StartupNotify=true
+StartupWMClass=it.lecturetranscriber.App

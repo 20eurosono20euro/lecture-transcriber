@@ -1,0 +1,29 @@
+model        : 0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf
+device       : cpu / int8 / 16 threads
+model load   : 2.0 s
+
+==============================================================================
+[1] REF: Buongiorno a tutti.
+    HYP: Buongiorno a tutti.
+    WER   0.0%   CER   0.0%   audio  1.59s  proc   2.82s  RTF 1.773
+[2] REF: In questa lezione parliamo della struttura dei dati.
+    HYP: In questa lezione parliamo della struttura dei dati.
+    WER   0.0%   CER   0.0%   audio  3.72s  proc   2.92s  RTF 0.785
+[3] REF: Il professor Rossi ha spiegato che le reti convoluzionali sono utili per le immagini.
+    HYP: Il professor Rossi ha spiegato che le reti convoluzionali sono utili per le immagini.
+    WER   0.0%   CER   0.0%   audio  5.63s  proc   3.01s  RTF 0.535
+[4] REF: La teoria della probabilita e la base di ogni modello statistico.
+    HYP: La teoria della probabilità è la base di ogni modello statistico.
+    WER  18.2%   CER   3.7%   audio  4.38s  proc   2.84s  RTF 0.647
+[5] REF: Dobbiamo ricordare che il teorema di Bayes collega probabilita condizionali e marginali.
+    HYP: Dobbiamo ricordare che il teorema di Maes collega probabilità condizionali e marginali.
+    WER  16.7%   CER   3.9%   audio  5.96s  proc   2.99s  RTF 0.503
+
+==============================================================================
+ utterances      : 5
+ mean WER        : 7.0%
+ mean CER        : 1.5%
+ total audio     : 21.28 s
+ total processing: 14.59 s
+ aggregate RTF   : 0.6854
+==============================================================================

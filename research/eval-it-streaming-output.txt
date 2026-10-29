@@ -1,0 +1,32 @@
+==============================================================================
+ Italian streaming Zipformer — WER/CER   (threads=4)
+==============================================================================
+
+[1] REF: Buongiorno a tutti.
+    HYP: Buongiorno a tutti
+    WER   0.0%   CER   0.0%   audio  1.59s  proc  0.04s  RTF 0.024
+
+[2] REF: In questa lezione parliamo della struttura dei dati.
+    HYP: In questa lezione parliamo della struttura dei lati
+    WER  12.5%   CER   2.3%   audio  3.72s  proc  0.07s  RTF 0.019
+
+[3] REF: Il professor Rossi ha spiegato che le reti convoluzionali sono utili per le immagini.
+    HYP: Il professore Rossi ha spiegato che le reti involuzionali sono utili per le imma
+    WER  21.4%   CER   9.9%   audio  5.63s  proc  0.08s  RTF 0.013
+
+[4] REF: La teoria della probabilita e la base di ogni modello statistico.
+    HYP: La teoria della probabilità della male di ogni modello statistico
+    WER  36.4%   CER   9.3%   audio  4.38s  proc  0.07s  RTF 0.016
+
+[5] REF: Dobbiamo ricordare che il teorema di Bayes collega probabilita condizionali e marginali.
+    HYP: Dobbiamo ricordare che il teorema di mais problema condizionali e marginali
+    WER  25.0%   CER  19.7%   audio  5.96s  proc  0.10s  RTF 0.017
+
+==============================================================================
+ utterances      : 5
+ mean WER        : 19.1%
+ mean CER        : 8.2%
+ total audio     : 21.28 s
+ total processing: 0.36 s
+ aggregate RTF   : 0.0169
+==============================================================================

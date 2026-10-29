@@ -1,0 +1,7 @@
+{
+  "name": "Lecture Transcriber",
+  "description": "Permette all'applicazione Lecture Transcriber di tenere la finestra sempre in primo piano (always-on-top) su Wayland, dove il protocollo xdg-shell non prevede questa richiesta.",
+  "uuid": "lecture-transcriber@localhost",
+  "shell-version": ["50"],
+  "version": 2
+}
