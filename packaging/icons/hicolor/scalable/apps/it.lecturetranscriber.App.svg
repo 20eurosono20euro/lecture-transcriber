@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icona applicativa di Lecture Transcriber (variante CHIARO).
+
+  Concetto: VOICE -> TEXT. A sinistra una capsula-microfono accentata
+  (l'ascolto via PipeWire), al centro tre barre d'onda verticali che
+  oscillano (il suono catturato), a destra tre righe-alto orizzontali
+  sempre piu' corte (gli appunti in formazione): l'audio che si deposita
+  in testo. Composizione su asse di lettura sinistra->destra.
+
+  Piu' i valori sono quelli reali del tema libadwaita chiaro
+  (window_bg ~#fafafa, accent #3584e4) e riusano i raggi del design
+  system dell'app: pill (999px) per capsula/barre, 64px per la fondina
+  GNOME, il bordo hairlne e' una vibrazione di colore, non una traccia.
+
+  Variante dark (stesso disegno, 3 colori cambiati): creare
+  it.lecturetranscriber.App.dark.svg con bg #242424, ink #f6f5f4 e ritagli
+  dei fori in colore fondo (#242424). Accent invariato.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- fondina (bg group) -->
+  <g id="fondina" aria-label="sfondo">
+    <rect x="0" y="0" width="512" height="512" rx="64" ry="64" fill="#fafafa" />
+  </g>
+
+  <!-- microfono: capsula accentata + griglia fori (ritagli in colore fondo) -->
+  <g id="microfono">
+    <rect x="148" y="132" width="96" height="164" rx="48" fill="#3584e4" />
+    <rect x="164" y="176" width="64" height="8" rx="4" fill="#fafafa" />
+    <rect x="164" y="200" width="64" height="8" rx="4" fill="#fafafa" />
+    <rect x="172" y="224" width="48" height="8" rx="4" fill="#fafafa" />
+  </g>
+
+  <!-- stand del microfono (in ink) -->
+  <g id="stand" fill="#1f2020">
+    <rect x="190" y="296" width="18" height="26" rx="9" />
+    <rect x="168" y="318" width="62" height="14" rx="7" />
+  </g>
+
+  <!-- waveform: 3 barre accentate, basi allineate alla capsula -->
+  <g id="waveform" fill="#3584e4">
+    <rect x="268" y="240" width="16" height="56" rx="8" />
+    <rect x="292" y="220" width="16" height="76" rx="8" />
+    <rect x="316" y="192" width="16" height="104" rx="8" />
+  </g>
+
+  <!-- testo: 3 righe-nota orizzontali, lunghezze decrescenti -->
+  <g id="testo" fill="#1f2020">
+    <rect x="360" y="192" width="76" height="16" rx="8" />
+    <rect x="360" y="232" width="60" height="16" rx="8" />
+    <rect x="360" y="272" width="52" height="16" rx="8" />
+  </g>
+</svg>

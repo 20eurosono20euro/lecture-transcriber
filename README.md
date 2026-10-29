@@ -5,10 +5,31 @@ GNOME Wayland. Una finestra flottante semitrasparente che trascrive ciò che
 dice il professore mentre tu prendi appunti in LibreOffice, Obsidian o un
 qualsiasi editor.
 
-**Nessun dato lascia il computer.** Nessun account, nessun servizio cloud, nessun
-privilegio di amministratore per le funzioni essenziali.
+> **Nessun dato lascia il computer.** Nessun account, nessun servizio cloud, nessun
+> privilegio di amministratore per le funzioni essenziali.
 
-![Fedora](https://img.shields.io/badge/Fedora-44-51A2DA) ![GNOME](https://img.shields.io/badge/GNOME-50-4A90D9) ![Wayland](https://img.shields.io/badge/Wayland-sì-5E5C64) ![License](https://img.shields.io/badge/license-MIT-green)
+![Fedora](https://img.shields.io/badge/Fedora-44-51A2DA) ![GNOME](https://img.shields.io/badge/GNOME-50-4A90D9) ![Wayland](https://img.shields.io/badge/Wayland-s%C3%AC-5E5C64) ![Python](https://img.shields.io/badge/Python-3.14-3776AB) ![GTK4](https://img.shields.io/badge/GTK-4-6C6C6C) ![libadwaita](https://img.shields.io/badge/libadwaita-1.9-3584E4) ![License](https://img.shields.io/badge/license-MIT-green) ![Status](https://img.shields.io/badge/status-alpha-orange)
+
+<p align="center">
+  <img src="docs/immagini/hero-presa-appunti.png" alt="Lecture Transcriber: la finestra flottante in presa di appunti assistita mentre trascrive la lezione" width="780">
+</p>
+
+<p align="center">
+  <em>La finestra flottante: trascrive la lezione mentre prendi appunti. Le due modalità si richiamano con un tap.</em>
+</p>
+
+### Due modalità, una finestra
+
+| | Presa di appunti assistita | Consultazione discreta |
+|---|---|---|
+| **Cosa fa** | Interattiva, con barra dei comandi e controlli di ascolto | Sola lettura: semitrasparente, minimale |
+| **Quando** | Quando trascrivi e vuoi inserire, segnalibri e note | Quando ripassi, cerchi o rileggi |
+
+<p align="center">
+  <img src="docs/immagini/modalita-accanto.png" alt="La stessa finestra in presa di appunti (a sinistra, con i comandi) e in consultazione discreta (a destra, semitrasparente)" width="820">
+</p>
+
+**Fedora / GNOME / Wayland** · **Python 3.14** · **Whisper in locale** · **MIT**
 
 ---
 

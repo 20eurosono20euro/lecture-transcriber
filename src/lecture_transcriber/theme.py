@@ -223,6 +223,7 @@ window.lt-window {
     box-shadow: none;
     border: none;
     color: alpha(@theme_fg_color, 0.78);
+    transition: 120ms ease;
 }
 .lt-icon-button:hover {
     background-color: alpha(currentColor, 0.09);
@@ -230,6 +231,16 @@ window.lt-window {
 }
 .lt-icon-button:active {
     background-color: alpha(currentColor, 0.15);
+}
+/* Il bersaglio da 28px e' troppo piccolo per un anello di focus pieno:
+   si disegna un anello sottile dentro il quadrato, senza far crescere
+   il pulsante. GTK dipinge gli anelli di focus solo quando si naviga
+   con la tastiera (non a ogni click), quindi qui non c'e' rischio di
+   "doppio anello". */
+.lt-icon-button:focus-visible {
+    outline: 2px solid alpha(@accent_color, 0.65);
+    outline-offset: -2px;
+    background-color: alpha(currentColor, 0.06);
 }
 /* Il pulsante primario: capsula piena, l'unico elemento fortemente
    colorato della finestra. */
@@ -279,15 +290,26 @@ window.lt-window {
     border: none;
     box-shadow: none;
     min-height: 26px;
+    transition: 120ms ease;
+}
+.lt-toggle:hover {
+    background-color: alpha(currentColor, 0.11);
 }
 .lt-toggle:checked {
     background-color: alpha(@accent_color, 0.16);
     color: @accent_color;
 }
+.lt-toggle:checked:hover {
+    background-color: alpha(@accent_color, 0.22);
+}
 
 /* ---- transcript ----------------------------------------------------- */
 .lt-transcript {
     padding: 2px 14px 8px 14px;
+    /* L'interlinea e' la costante dichiarata sopra: 1.58x il corpo di
+       lettura, perche' le righe hanno timestamp e segnalibri a inizio
+       riga e hanno bisogno di aria (vedi TRANSCRIPT_LINE_HEIGHT). */
+    line-height: %(line_height)s;
 }
 .lt-transcript text {
     background: none;
@@ -309,6 +331,45 @@ window.lt-window {
    l'occhio senza spezzare il flusso di lettura. */
 .lt-transcript-separator {
     color: alpha(currentColor, 0.10);
+}
+
+/* ---- elenco segnalibri ---------------------------------------------- */
+/* Le righe dell'elenco segnalibri sono pulsanti piatti dentro il
+   pannello: anche qui bersaglio comodo e hover appena accennato. */
+.lt-bookmark-list {
+    background: none;
+}
+.lt-bookmark-list > row {
+    border-radius: %(control_radius)s;
+    margin: 1px 6px;
+    padding: 4px 6px;
+}
+.lt-bookmark-list > row:hover {
+    background-color: alpha(currentColor, 0.06);
+}
+.lt-bookmark-list > row:focus-visible {
+    outline: 2px solid alpha(@accent_color, 0.6);
+    outline-offset: -2px;
+}
+
+/* ---- barra di scorrimento ------------------------------------------ */
+/* La scrollbar del transcript segue la palette: un cursore sottile e
+   arrotondato, visibile solo quando serve (overlay). */
+.lt-transcript scrollbar {
+    background: none;
+}
+.lt-transcript scrollbar > range > trough {
+    background: none;
+    border-radius: %(pill_radius)s;
+}
+.lt-transcript scrollbar > range > trough > slider {
+    background-color: alpha(currentColor, 0.18);
+    border-radius: %(pill_radius)s;
+    min-width: 5px;
+    min-height: 5px;
+}
+.lt-transcript scrollbar > range > trough > slider:hover {
+    background-color: alpha(currentColor, 0.28);
 }
 
 /* ---- campi ---------------------------------------------------------- */
@@ -384,6 +445,7 @@ def _fill(template: str) -> str:
         "control_radius": RADIUS["control"],
         "field_radius": RADIUS["field"],
         "pill_radius": RADIUS["pill"],
+        "line_height": str(TRANSCRIPT_LINE_HEIGHT),
         "footnote": TYPE["footnote"][0],
         "caption": TYPE["caption"][0],
     }

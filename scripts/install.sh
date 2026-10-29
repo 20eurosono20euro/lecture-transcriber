@@ -143,6 +143,25 @@ mkdir -p "$DESKTOP_DIR"
 cp "$HERE/packaging/lecture-transcriber.desktop" \
    "$DESKTOP_DIR/lecture-transcriber.desktop"
 
+# --- icone -------------------------------------------------------------------
+# Le icone hicolor vanno in ~/.local/share/icons (niente root), con le
+# varianti chiara (default) e dark (suffisso .dark) da hicolor-1.3.
+# gtk-update-icon-cache rinnova l'indice: senza, le nuove icone restano
+# invisibili finche' il cache non viene rigenerato da qualcos'altro.
+log "Installo le icone in ~/.local/share/icons/hicolor"
+ICON_BASE="$HOME/.local/share/icons/hicolor"
+ICON_TREE="$HERE/packaging/icons/hicolor"
+for dir in "$ICON_TREE"/*/apps; do
+    size="$(basename "$(dirname "$dir")")"
+    dest="$ICON_BASE/$size/apps"
+    mkdir -p "$dest"
+    cp "$dir"/*.png "$dest/" 2>/dev/null || true
+done
+cp "$ICON_TREE/scalable/apps"/*.svg "$ICON_BASE/scalable/apps/" 2>/dev/null || true
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "$ICON_BASE" >/dev/null 2>&1 || true
+fi
+
 # --- estensione GNOME --------------------------------------------------------
 if (( WITH_EXT )); then
     if [[ -d "$HERE/shell-extension" ]]; then

@@ -125,11 +125,24 @@ cp shell-extension/extension.js shell-extension/metadata.json \
 %{__mkdir_p} %{buildroot}%{_datadir}/%{name}/scripts
 cp scripts/ensure-venv.sh %{buildroot}%{_datadir}/%{name}/scripts/
 
+# Icone hicolor: lo stesso albero che usa install.sh per l'installazione
+# per utente, qui in /usr/share/icons/hicolor per il pacchetto RPM.
+%{__mkdir_p} %{buildroot}%{_datadir}/icons/hicolor
+cp -r packaging/icons/hicolor/* %{buildroot}%{_datadir}/icons/hicolor/
+
+%post
+# Rigenera l'indice delle icone perche' le nuove icone hicolor siano
+# subito visibili nei menu senza dover rientrare nella sessione.
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t %{_datadir}/icons/hicolor >/dev/null 2>&1 || :
+fi
+
 %files
 %license LICENSE
 %doc README.md docs/analisi-fattibilita.md docs/installazione.md docs/test.md
 %{_datadir}/%{name}
 %{_datadir}/applications/%{name}.desktop
+%{_datadir}/icons/hicolor
 %{_bindir}/lecture-transcriber
 
 %changelog
