@@ -60,6 +60,30 @@ DECODE_LATENCY_HINT = "latenza ~3 s"
 MODE_CONSULT = "consultazione"
 MODE_NOTES = "presa di appunti"
 
+#: Tolleranza, in pixel, entro cui il viewport si considera "al fondo".
+#: Presta in prestito da DeLive (``isAtBottom``, 30 px): senza una
+#: tolleranza, un arrotondamento di un pixel mostrerebbe la pillola di
+#: ritorno mentre l'utente sta leggendo proprio l'ultima riga.
+REJOIN_TOLERANCE_PX = 30
+
+
+def _within_rejoin_tolerance(
+    value: float, upper: float, page_size: float
+) -> bool:
+    """True se il viewport sta entro :data:`REJOIN_TOLERANCE_PX` dal fondo.
+
+    Prende i tre numeri del ``Gtk.Adjustment`` invece dell'aggiustamento
+    stesso per una ragione misurata: in un ambiente senza display lo
+    ``ScrolledWindow`` non ha altezza, quindi ricalcola ``upper`` e
+    ``page_size`` dal contenuto non appena il test scrive ``value`` —
+    misurato, ``set_value(500)`` tornava 8.0 e la sintetica posizione
+    scritta dal test veniva sovrascritta. Con i numeri isolati la
+    tolleranza si collauda per quella che e', e il cablaggio col widget
+    vero si collauda a parte (``_update_rejoin``).
+    """
+    return value >= upper - page_size - REJOIN_TOLERANCE_PX
+
+
 # Il foglio di stile e le primitive di design (capsule, controllo
 # segmentato, scala tipografica) vivono in theme.py: qui resta solo la
 # costruzione dei widget. I colori nominati del tema servono ai tag di
@@ -163,9 +187,11 @@ class ShellBridge:
 class TranscriptView:
     """La vista della trascrizione: cronologia scorrevole e ricercabile.
 
-    Il testo provvisorio vive in un tag dedicato ed e' sempre l'ultima
-    riga: quando il segmento reale arriva, il provvisorio viene rimosso
-    e non resta testo duplicato.
+    Il testo provvisorio vive in un tag dedicato e, quando esiste un
+    segmento finalizzato, continua l'ultima riga invece di comparire su
+    una riga separata: quando il segmento reale arriva, il provvisorio
+    viene rimosso e non restano le stesse parole su due righe (il
+    "salto di riga" che si vedeva a ogni ridecodifica ~3 s).
     """
 
     @staticmethod
@@ -276,18 +302,35 @@ class TranscriptView:
             self._bookmarks.add(index)
 
     def set_partial(self, text: str) -> None:
-        """Mostra (o toglie) l'ipotesi provvisoria."""
+        """Mostra (o toglie) l'ipotesi provvisoria.
+
+        L'ipotesi e' scritta in coda all'ultimo segmento finalizzato,
+        subito dopo il suo testo e prima del separatore, NON come riga
+        nuova in fondo: quando il segmento finale arriva le stesse parole
+        non ricompaiono una riga piu' sopra (misurato: un salto di riga
+        duplicato a ogni ridecodifica del segmento aperto, ~3 s).
+        """
         self.clear_partial()
         if not text:
             return
-        end = self.buffer.get_end_iter()
-        start = end.get_offset()
-        self.buffer.insert_with_tags(end, text, self.tag_partial)
-        self.buffer.insert(end, "\n")
+        # la riga piu' recente: il suo span termina appena prima del
+        # separatore, quindi ``text_end`` e' l'offset dove va il prossimo
+        # pezzo di testo (la coda visiva della riga).
+        if self._rows:
+            index = max(self._rows)
+            start = self._rows[index][1]
+            delimiter = " "
+        else:
+            start = self.buffer.get_end_iter().get_offset()
+            delimiter = ""
+        it = self.buffer.get_iter_at_offset(start)
+        self.buffer.insert_with_tags(it, f"{delimiter}{text}", self.tag_partial)
+        self.buffer.insert(it, "\n")
         # Lo span deve comprendere anche il terminatore di riga: se
         # restasse fuori, cancellare l'ipotesi lascerebbe un a capo
-        # orfano nel buffer.
-        finish = self.buffer.get_end_iter().get_offset()
+        # orfano nel buffer. L'ipotesi vive ORA dentro l'ultima riga:
+        # cancellarla riporta il testo al punto esatto in cui era.
+        finish = start + len(delimiter) + len(text) + 1
         self._partial_span = (start, finish)
 
     def clear_partial(self) -> None:
@@ -336,7 +379,17 @@ class TranscriptView:
         chi copia "l'ultimo segmento" vuole il testo, non ``"01:05  La
         varianza..."``. Toglierlo qui lo toglie per tutti gli usi.
         """
-        text = self.full_text().strip()
+        # Con un'ipotesi provvisoria presente, la lettura si ferma prima
+        # dello span del provvisorio: il testo da copiare e' quello
+        # finalizzato, non la coda in corsivo (che cambia a ogni
+        # ridecodifica). Non si tocca il buffer: l'ipotesi resta in vista.
+        if self._partial_span is not None:
+            begin = self.buffer.get_start_iter()
+            stop = self.buffer.get_iter_at_offset(self._partial_span[0])
+            text = self.buffer.get_text(begin, stop, False)
+        else:
+            text = self.full_text()
+        text = text.strip()
         if not text:
             return ""
         for line in reversed(text.splitlines()):
@@ -381,6 +434,15 @@ class MainWindow(Adw.ApplicationWindow):
         self._search_rows: list[int] = []
         self._search_view_active = False
         self._auto_scroll = self.settings.auto_scroll
+        # Il "segui il fondo" non e' la preferenza di scorrimento ma uno
+        # stato derivato dalla posizione reale del viewport: si segue fin
+        # quando il bordo del testo e' dentro una tolleranza di 30 px dal
+        # fondo. Eredita DeLive: se l'utente scorre via, si smette di
+        # seguire e compare la pillola di ritorno.
+        self._following = True
+        # Traccia se un'ipotesi provvisoria e' in vista: serve alla
+        # seconda capsula di stato ("trascrivendo") accanto al transcript.
+        self._partial_on_screen = False
         self._closing = False
 
         self.set_css_classes(["lt-window"])
@@ -438,11 +500,35 @@ class MainWindow(Adw.ApplicationWindow):
 
     # -- barra superiore ---------------------------------------------------
     def _build_top_bar(self) -> None:
-        """Barra superiore: titolo, capsula di stato, microfono.
+        """Barra superiore: titolo, capsula di stato, sempre-in-primo-piano.
 
         In consultazione discreta questa barra si riduce al minimo
         indispensabile (stato del microfono e niente altro), perche' il
         requisito e' che la finestra sia leggibile e discretta.
+
+        Qui sta anche il **tasto del sempre-in-primo-piano**, ed e' una
+        scelta misurata, non estetica. Due conti:
+
+        * **raggiungibilita'**: la barra superiore e' l'unica superficie di
+          comando che *non* viene nascosta da nessuna modalita'. La riga
+          dei comandi sparisce in consultazione discreta e in vista
+          compatta, quindi un tasto messo la' sarebbe irraggiungibile
+          proprio quando serve di piu' — rileggere una lezione con la
+          finestra sopra l'editor di appunti. Verificato: ``_top_bar``
+          resta visibile in tutti e tre gli stati.
+        * **larghezza**: la riga comandi misura 402 px naturali e la
+          finestra ne ha 420 (misurato): aggiungere un bottone da 38 px la
+          porta a 444 px e la finestra si allarga — lo stesso difetto che
+          aveva costretto la barra su due file. La barra superiore sta a
+          299 px, con ~109 px di residuo: il tasto ci sta senza stringere
+          niente.
+
+        Il tasto e' un ``Gtk.ToggleButton`` perche' il suo stato *e'*
+        l'informazione: acceso = la finestra sta sopra le altre. Lo stato
+        mostrato viene da ``settings.always_on_top`` e non da
+        ``GetAlwaysOnTop``: misurato, con nessuna finestra dell'app aperta
+        l'estensione risponde ``false`` anche se la preferenza e' accesa,
+        quindi quel metodo non e' una fonte attendibile per l'interfaccia.
         """
         self.top_bar = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -462,18 +548,46 @@ class MainWindow(Adw.ApplicationWindow):
         self.title_label = title
         self.top_bar.append(title)
 
-        # capsula di modalita': sempre visibile, mai ambiguo
-        self.mode_badge = theme.capsule("presa di appunti", "accent")
-        self.top_bar.append(self.mode_badge)
-
         # capsula di stato dell'ascolto: sostituisce l'icona del
         # microfono perche' un'icona da sola non dice se il microfono
-        # sta registrando, e' in pausa o e' spento
+        # sta registrando, e' in pausa o e' spento. La modalita' NON ha
+        # una capsula sua: la dicono il controllo segmentato (sempre
+        # visibile) e il suffisso del titolo, tre indicatori per la
+        # stessa informazione erano rumore.
         self.state_capsule = theme.capsule("inattivo", "quiet")
         self.top_bar.append(self.state_capsule)
 
         spacer = Gtk.Box(hexpand=True)
         self.top_bar.append(spacer)
+
+        # Salva lezione come PDF in Documents: nell'angolo in alto, sempre
+        # visibile (anche in consultazione), perche' salvare il lavoro fatto
+        # non deve mai essere nascosto dietro un menù.
+        self.save_lesson_button = Gtk.Button(
+            icon_name="document-save-symbolic",
+            tooltip_text=(
+                "Salva la lezione come PDF nella cartella Documenti (Documents)"
+            ),
+        )
+        self.save_lesson_button.add_css_class("lt-primary")
+        self.save_lesson_button.connect("clicked", self._on_save_lesson)
+        self.top_bar.append(self.save_lesson_button)
+
+        # -- sempre in primo piano: un tasto, non una preferenza --
+        # ``view-pin-symbolic`` esiste nel tema icone (verificato), a
+        # differenza di ``document-export-symbolic`` usato piu' sotto, che
+        # nel tema non c'e'.
+        self.pin_button = Gtk.ToggleButton(
+            icon_name="view-pin-symbolic",
+            tooltip_text=(
+                "Tieni la finestra sopra le altre "
+                "(richiede l'estensione GNOME Shell «Lecture Transcriber»)"
+            ),
+        )
+        self.pin_button.add_css_class("lt-icon-button")
+        self.pin_button.set_active(self.settings.always_on_top)
+        self.pin_button.connect("toggled", self._on_pin_toggled)
+        self.top_bar.append(self.pin_button)
 
         # tempo trascorso della sessione, in cifre tabellari: compare
         # solo mentre si ascolta
@@ -546,9 +660,55 @@ class MainWindow(Adw.ApplicationWindow):
         stack.append(self.compact_label)
 
         self.view.scroller.set_vexpand(True)
-        stack.append(self.view.scroller)
+
+        # L'overlay tiene la pillola di ritorno e la seconda capsula di
+        # stato sopra il transcript, senza rubare spazio alla colonna.
+        self.scroll_overlay = Gtk.Overlay()
+        self.scroll_overlay.set_child(self.view.scroller)
+        self._build_transcript_overlay_children()
+        stack.append(self.scroll_overlay)
 
         self._reading_area = stack
+
+    def _build_transcript_overlay_children(self) -> None:
+        """Figli dell'overlay: pillola di ritorno e capsula di stato.
+
+        La pillola di ritorno e' un ``Gtk.Revealer`` che compare solo
+        quando si smette di seguire il fondo (vedi ``_update_rejoin``): la
+        tolleranza si valuta in idle, dopo che il contenuto e' stato
+        misurato, altrimenti la capsula sfarfalla a ogni segmento.
+        La seconda capsula di stato riflette la stessa mappa
+        ``_STATE_CAPSULE`` della barra superiore piu' lo stato
+        "trascrivendo", quando un'ipotesi provvisoria e' in vista.
+        """
+        self.rejoin_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.CROSSFADE,
+            transition_duration=150,
+        )
+        self.rejoin_button = Gtk.Button(label="Torna all'ultimo testo")
+        self.rejoin_button.add_css_class("lt-rejoin")
+        self.rejoin_button.connect("clicked", self._on_rejoin)
+        self.rejoin_revealer.set_child(self.rejoin_button)
+        # In GTK4 i figli dell'overlay si allineano con le loro proprieta'
+        # halign/valign (non esiste set_overlay_halign).
+        self.rejoin_revealer.set_halign(Gtk.Align.END)
+        self.rejoin_revealer.set_valign(Gtk.Align.END)
+        self.scroll_overlay.add_overlay(self.rejoin_revealer)
+        self.rejoin_revealer.set_margin_end(14)
+        self.rejoin_revealer.set_margin_bottom(14)
+
+        self.transcript_state_capsule = theme.capsule("pronto", "quiet")
+        self.transcript_state_capsule.set_halign(Gtk.Align.END)
+        self.transcript_state_capsule.set_valign(Gtk.Align.START)
+        self.scroll_overlay.add_overlay(self.transcript_state_capsule)
+        self.transcript_state_capsule.set_margin_start(8)
+        self.transcript_state_capsule.set_margin_top(8)
+
+        # Lo stato del viewport (dentro la tolleranza?) si valuta dopo il
+        # disegno: al widget serve la posizione del vadjustment, che e'
+        # aggiornata soltanto quando GTK ha misurato il nuovo contenuto.
+        adj = self.view.scroller.get_vadjustment()
+        adj.connect("value-changed", lambda *_: self._schedule_rejoin_update())
 
     def _build_meta_fields(self, parent: Gtk.Box) -> None:
         """Campi dei metadati, raggruppati in una capsula unica."""
@@ -665,16 +825,24 @@ class MainWindow(Adw.ApplicationWindow):
             orientation=Gtk.Orientation.VERTICAL,
             margin_top=4,
             margin_bottom=10,
-            margin_start=14,
-            margin_end=14,
+            margin_start=8,
+            margin_end=8,
         )
 
+        # La capsula e' **verticale**, in due file: sopra il commutatore
+        # di modalita', sotto i comandi. Prima era un'unica riga che
+        # misurava 590 px di minimo — piu' della finestra (420 px), quindi
+        # la finestra si allargava per forza (misurato). Su due file il
+        # massimo e' la riga dei comandi (~400 px) e la finestra resta
+        # stretta, com'era nelle intenzioni di chi prende appunti accanto
+        # a un editor.
         bar = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
+            orientation=Gtk.Orientation.VERTICAL,
             spacing=4,
             halign=Gtk.Align.CENTER,
         )
         bar.add_css_class("lt-floating-bar")
+        bar.add_css_class("lt-floating-bar-vertical")
         self.command_bar = bar
 
         # -- controllo segmentato della modalita' --
@@ -689,8 +857,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.mode_control = self.mode_segmented
         bar.append(self.mode_segmented)
 
-        # I comandi vivono in un contenitore proprio: in consultazione si
-        # nasconde questo, non la barra, cosi' il commutatore resta.
+        # I comandi vivono in un contenitore proprio, riga 2 della capsula:
+        # in consultazione si nasconde questo, non la barra, cosi' il
+        # commutatore resta.
         commands = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=4
         )
@@ -766,11 +935,10 @@ class MainWindow(Adw.ApplicationWindow):
         )
         commands.append(self.jump_button)
 
-        sep3 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        sep3.add_css_class("lt-dim")
-        commands.append(sep3)
-
         # -- copia, esporta, preferenze --
+        # Nessun separatore qui: questi comandi completano la "barra
+        # strumenti" e un terzo filetto in una barra gia' piena di icone
+        # aggiungeva linee, non chiarezza.
         self.copy_button = Gtk.MenuButton(
             icon_name="edit-copy-symbolic",
             tooltip_text="Copia negli appunti",
@@ -779,8 +947,14 @@ class MainWindow(Adw.ApplicationWindow):
         self._build_copy_menu()
         commands.append(self.copy_button)
 
+        # ``document-export-symbolic`` NON esiste nel tema icone di Fedora
+        # 44 (verificato con Gtk.IconTheme.has_icon: risponde False), quindi
+        # il pulsante restava disegnato con l'icona "image-missing" di
+        # ripiego — un quadrato vuoto al posto del punto esclamativo
+        # dell'export. ``document-send-symbolic`` c'e' e ha lo stesso
+        # significato ("manda fuori").
         self.export_button = Gtk.MenuButton(
-            icon_name="document-export-symbolic",
+            icon_name="document-send-symbolic",
             tooltip_text="Esporta la trascrizione",
         )
         self.export_button.add_css_class("lt-icon-button")
@@ -852,6 +1026,7 @@ class MainWindow(Adw.ApplicationWindow):
             ("Testo semplice (.txt)", "txt"),
             ("Markdown (.md)", "md"),
             ("Markdown con timestamp (.md)", "md_ts"),
+            ("Sottotitoli (.srt)", "srt"),
         ):
             item = Gio.MenuItem.new(label, None)
             item.set_action_and_target_value(
@@ -859,7 +1034,7 @@ class MainWindow(Adw.ApplicationWindow):
             )
             menu.append_item(item)
         self.export_button.set_menu_model(menu)
-        self._export_formats = ("txt", "md", "md_ts")
+        self._export_formats = ("txt", "md", "md_ts", "srt")
 
     def _build_settings_popover(self) -> None:
         # Il pannello e' ancorato a un pulsante dentro la barra mobile, in
@@ -1033,17 +1208,99 @@ class MainWindow(Adw.ApplicationWindow):
     # -- callback dalla pipeline -------------------------------------------
     def _on_segment(self, index: int, start: float, text: str) -> bool:
         self.view.add_segment(index, start, text)
-        if self._auto_scroll and not self._search_view_active:
+        # un segmento finalizzato sostituisce l'ipotesi provvisoria
+        self._partial_on_screen = False
+        if self._following:
             self.view.scroll_to_end()
+        self._update_transcript_capsule()
+        self._schedule_rejoin_update()
         self._refresh_compact_label()
         return False
 
     def _on_partial(self, text: str) -> bool:
         self.view.set_partial(text)
-        if self._auto_scroll and not self._search_view_active:
+        self._partial_on_screen = bool(text)
+        if self._following:
             self.view.scroll_to_end()
+        self._update_transcript_capsule()
+        self._schedule_rejoin_update()
         self._refresh_compact_label()
         return False
+
+    def _on_rejoin(self, _button=None) -> None:
+        """Torna a seguire il fondo: il click sulla pillola.
+        """
+        self._following = True
+        self.view.scroll_to_end()
+        self._schedule_rejoin_update()
+        return False
+
+    def _schedule_rejoin_update(self) -> bool:
+        """Valuta la tolleranza di ritorno in idle.
+
+        Il valore del ``vadjustment`` riflette il *nuovo* contenuto solo
+        dopo che GTK lo ha misurato: chiamare ``_update_rejoin`` qui
+        dentro, a testo appena scritto, mostrerebbe la pillola a ogni
+        segmento (il viewport non e' ancora stato spinto al fondo). Si
+        rimanda di un giro d'eventi, quando anche l'ultima
+        ``scroll_to_end`` e' stata computata.
+        """
+        GLib.idle_add(self._update_rejoin)
+        return False
+
+    def _update_rejoin(self) -> bool:
+        """Mostra/nascondi la pillola di ritorno in base al viewport.
+
+        Si segue il fondo finche' il valore del ``vadjustment`` sta entro
+        30 px dal massimo; oltre quella tolleranza la pillola compare. La
+        valutazione va fatta su upper e page_size del vadjustment, non su
+        un confronto col testo, perche' e' la posizione *realmente*
+        scorsa che conta.
+
+        Il confronto vero e' in :func:`_within_rejoin_tolerance`: sta
+        fuori perche' e' pura aritmetica su tre numeri, e va collaudata
+        come tale (vedi il test della tolleranza).
+        """
+        adj = self.view.scroller.get_vadjustment()
+        if adj is None:
+            return False
+        at_bottom = _within_rejoin_tolerance(
+            adj.get_value(), adj.get_upper(), adj.get_page_size()
+        )
+        if at_bottom:
+            self._following = True
+        else:
+            self._following = False
+        self.rejoin_revealer.set_reveal_child(not at_bottom)
+        return False
+
+    #: Testo alternativo della seconda capsula quando si sta trascrivendo.
+    _TRANSCRIBING = ("trascrivendo", "warning")
+
+    def _update_transcript_capsule(self) -> None:
+        """Aggiorna la seconda capsula accanto al transcript.
+
+        Segue la stessa mappa ``_STATE_CAPSULE`` della barra superiore,
+        ma mentre un'ipotesi provvisoria e' in vista e la pipeline e'
+        in ascolto mostra lo stato dedicato "trascrivendo" (ambra).
+        """
+        listening = self.pipeline.state == ListenerState.LISTENING
+        if self._partial_on_screen and listening:
+            text, style = self._TRANSCRIBING
+        else:
+            state = self.pipeline.state
+            text, style = self._STATE_CAPSULE.get(state, ("pronto", "quiet"))
+        cap = self.transcript_state_capsule
+        cap.set_text(text)
+        for cls in (
+            "lt-capsule-quiet",
+            "lt-capsule-accent",
+            "lt-capsule-success",
+            "lt-capsule-warning",
+            "lt-capsule-error",
+        ):
+            cap.remove_css_class(cls)
+        cap.add_css_class(f"lt-capsule-{style}")
 
     def _on_level(self, rms: float, peak: float) -> bool:
         # un livello non finito (campione corrotio a monte) farebbe
@@ -1133,6 +1390,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._start_elapsed_timer()
         else:
             self._stop_elapsed_timer()
+        self._update_transcript_capsule()
         self.status_label.set_text(
             {
                 ListenerState.LISTENING: f"in ascolto \u00b7 {DECODE_LATENCY_HINT}",
@@ -1313,14 +1571,6 @@ class MainWindow(Adw.ApplicationWindow):
         secondario.
         """
         consult = self._mode == MODE_CONSULT
-        self.mode_badge.set_text(
-            "consultazione discreta" if consult else "presa di appunti assistita"
-        )
-        self.mode_badge.remove_css_class("lt-capsule-accent")
-        self.mode_badge.remove_css_class("lt-capsule-quiet")
-        self.mode_badge.add_css_class(
-            "lt-capsule-quiet" if consult else "lt-capsule-accent"
-        )
         # i comandi spariscono: la finestra si legge, non si pilota.
         # Si nasconde il contenitore dei comandi, **non** la barra: il
         # commutatore di modalita' deve restare, altrimenti non c'e' modo
@@ -1339,10 +1589,9 @@ class MainWindow(Adw.ApplicationWindow):
         )
 
     def jump_to_latest(self, _button=None) -> None:
-        self._auto_scroll = True
-        self.settings.auto_scroll = True
-        self.auto_scroll_row.set_active(True)
+        self._following = True
         self.view.scroll_to_end()
+        self._schedule_rejoin_update()
 
     def _on_search_changed(self, entry: Gtk.SearchEntry) -> None:
         self._search_query = entry.get_text().strip()
@@ -1473,19 +1722,87 @@ class MainWindow(Adw.ApplicationWindow):
         self.compact_label.set_text(text)
         self.compact_label.set_tooltip_text(text)
 
-    def _on_always_on_top_changed(self, row: Adw.SwitchRow, _pspec) -> None:
-        enabled = row.get_active()
-        self.settings.always_on_top = enabled
+    def _on_pin_toggled(self, button: Gtk.ToggleButton) -> None:
+        """Il tasto del sempre-in-primo-piano: acceso = sopra le altre.
+
+        Due differenze dal percorso della preferenza, entrambe volute:
+
+        * se l'estensione non c'e' il tasto **torna spento** e la
+          preferenza non viene toccata. Il percorso della riga salvava
+          ``always_on_top=True`` anche quando la chiamata D-Bus era
+          fallita, lasciando una preferenza che promette qualcosa che non
+          succede — e al riavvio la finestra non sarebbe sopra le altre
+          nonostante l'interruttore acceso;
+        * non disabilita niente. Il percorso della riga faceva
+          ``row.set_sensitive(False)``: misurato, dopo un solo tentativo a
+          vuoto l'utente non poteva piu' toccare l'interruttore, e se
+          l'estensione veniva installata dopo restava spento senza
+          possibilita' di accenderlo. Il tasto invece riprova a ogni
+          pressione: installare l'estensione e premere di nuovo funziona.
+
+        Lo stato mostrato viene dalla preferenza, che e' la sola fonte
+        affidabile (``GetAlwaysOnTop`` mente quando la finestra non e'
+        aperta — misurato).
+        """
+        enabled = button.get_active()
         if self._shell.set_always_on_top(enabled):
+            self.settings.always_on_top = enabled
+            self._sync_always_on_top_rows()
             return
-        # l'estensione non c'e': la preferenza resta salvata ma non ha effetto
-        row.set_sensitive(False)
+        # l'estensione non risponde: si torna allo stato di prima, senza
+        # salvare una preferenza che non ha effetto
+        button.handler_block_by_func(self._on_pin_toggled)
+        button.set_active(self.settings.always_on_top)
+        button.handler_unblock_by_func(self._on_pin_toggled)
         self.toast_overlay.add_toast(
             Adw.Toast.new(
                 "Sempre in primo piano non disponibile: manca l'estensione "
                 "GNOME Shell «Lecture Transcriber»"
             )
         )
+
+    def _sync_always_on_top_rows(self) -> None:
+        """Allinea l'interruttore delle preferenze al tasto della barra.
+
+        Sono due viste della stessa preferenza: se cambia da una parte
+        l'altra deve seguire, altrimenti l'utente vede due stati diversi
+        per la stessa cosa e non sa quale sia quello vero.
+        """
+        row = getattr(self, "always_on_top_row", None)
+        if row is None:
+            return
+        active = self.settings.always_on_top
+        row.handler_block_by_func(self._on_always_on_top_changed)
+        row.set_active(active)
+        row.set_sensitive(True)
+        row.handler_unblock_by_func(self._on_always_on_top_changed)
+
+    def _on_always_on_top_changed(self, row: Adw.SwitchRow, _pspec) -> None:
+        enabled = row.get_active()
+        if self._shell.set_always_on_top(enabled):
+            self.settings.always_on_top = enabled
+            self._sync_pin_button()
+            return
+        # l'estensione non c'e': la preferenza resta salvata ma non ha effetto
+        # (non si disabilita la riga: rimettendo a posto l'estensione deve
+        # restare possibile riprovare, misurato il difetto opposto)
+        row.set_sensitive(True)
+        self.toast_overlay.add_toast(
+            Adw.Toast.new(
+                "Sempre in primo piano non disponibile: manca l'estensione "
+                "GNOME Shell «Lecture Transcriber»"
+            )
+        )
+
+    def _sync_pin_button(self) -> None:
+        """Allinea il tasto della barra alla preferenza."""
+        button = getattr(self, "pin_button", None)
+        if button is None:
+            return
+        active = self.settings.always_on_top
+        button.handler_block_by_func(self._on_pin_toggled)
+        button.set_active(active)
+        button.handler_unblock_by_func(self._on_pin_toggled)
 
     def apply_always_on_top(self) -> bool:
         """Chiede all'estensione GNOME Shell il sempre in primo piano.
@@ -1496,8 +1813,12 @@ class MainWindow(Adw.ApplicationWindow):
         if not self.settings.always_on_top:
             return True
         if self._shell.set_always_on_top(True):
+            self._sync_pin_button()
             return True
-        self.always_on_top_row.set_sensitive(False)
+        # Non si disabilita ne' la riga ne' il tasto: la finestra continua
+        # a funzionare e l'utente puo' riprovare dopo aver installato
+        # l'estensione.
+        self.always_on_top_row.set_sensitive(True)
         self.toast_overlay.add_toast(
             Adw.Toast.new(
                 "Sempre in primo piano non disponibile: manca l'estensione "
@@ -1575,7 +1896,12 @@ class MainWindow(Adw.ApplicationWindow):
                 Adw.Toast.new("Nessuna sessione da esportare")
             )
             return
-        suffix = {"txt": ".txt", "md": ".md", "md_ts": "-ts.md"}.get(fmt, ".txt")
+        suffix = {
+            "txt": ".txt",
+            "md": ".md",
+            "md_ts": "-ts.md",
+            "srt": ".srt",
+        }.get(fmt, ".txt")
         dialog = Gtk.FileDialog()
         dialog.set_title("Esporta la trascrizione")
         dialog.set_initial_name(f"trascrizione{suffix}")
@@ -1596,11 +1922,104 @@ class MainWindow(Adw.ApplicationWindow):
         if exporter is None or session_id is None:
             return
         try:
+            text = exporter.render(session_id, fmt)
+        except Exception:
+            self.toast_overlay.add_toast(Adw.Toast.new("Export fallito"))
+            return
+        self._show_export_preview(fmt, path, exporter, session_id, text)
+
+    def _show_export_preview(self, fmt, path, exporter, session_id, text) -> None:
+        """Mostra il testo prima di scriverlo: la conferma resta esplicita.
+
+        Scrivere a colpo secco e' un difetto chiuso: nessun controllo di
+        quel che finisce nel file. Ora il contenuto anticipato compare in
+        una finestra di sola lettura, monospace, e la scrittura avviene
+        solo premendo "Conferma salvataggio". Chiudere la finestra senza
+        confermare non scrive nulla e non mostra toast. Una sola anteprima
+        per volta: se ne riapre un'altra, la precedente viene chiusa.
+        """
+        current = getattr(self, "_export_preview", None)
+        if current is not None:
+            current.destroy()
+        preview = Adw.PreferencesWindow()
+        preview.set_title("Anteprima esportazione")
+        preview.set_default_size(380, 420)
+
+        buffer = Gtk.TextBuffer()
+        buffer.set_text(text)
+        text_view = Gtk.TextView()
+        text_view.set_buffer(buffer)
+        text_view.set_editable(False)
+        text_view.set_cursor_visible(False)
+        text_view.set_monospace(True)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_child(text_view)
+        scroller.set_vexpand(True)
+
+        confirm = Gtk.Button(label="Conferma salvataggio")
+        confirm.add_css_class("suggested-action")
+        confirm.connect(
+            "clicked", self._on_export_confirm, preview, fmt, path, exporter, session_id
+        )
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.append(scroller)
+        box.append(confirm)
+        preview.set_content(box)
+        self._export_preview = preview
+        preview.present()
+
+    def _on_export_confirm(
+        self, _button, preview, fmt, path, exporter, session_id
+    ) -> None:
+        """Chiude l'anteprima e scrive il file: la sola strada di scrittura."""
+        preview.destroy()
+        if getattr(self, "_export_preview", None) is preview:
+            self._export_preview = None
+        try:
             exporter.export(session_id, fmt, path)
         except Exception as exc:
             self.toast_overlay.add_toast(Adw.Toast.new(f"Export fallito: {exc}"))
             return
         self.toast_overlay.add_toast(Adw.Toast.new(f"Salvato in {path.name}"))
+
+    # -- salva lezione in PDF ----------------------------------------------
+    def _on_save_lesson(self, _button) -> None:
+        """Salva la lezione come PDF in ~/Documents, senza chiedere dove.
+
+        E' il tasto della barra superiore: un tap, un file pronto da
+        consegnare o rivedere. Il nome deriva da corso, docente e data
+        (via ``safe_filename``), perche' sia unico e riconoscibile.
+        """
+        store = self.pipeline.store
+        session_id = self.pipeline.session.session_id
+        if store is None or session_id is None:
+            self.toast_overlay.add_toast(
+                Adw.Toast.new("Niente da salvare: nessuna lezione aperta")
+            )
+            return
+        course = self.pipeline.session.course or ""
+        professor = self.pipeline.session.professor or ""
+        date = self.pipeline.session.date or ""
+        from .export import safe_filename as _safe_name
+
+        base_name = _safe_name(course, professor, date)
+        documents = Path.home() / "Documents"
+        path = documents / f"{base_name}.pdf"
+        try:
+            from . import pdf_export
+
+            path = pdf_export.save_pdf(store, session_id, path)
+        except Exception as exc:
+            self.toast_overlay.add_toast(Adw.Toast.new(f"Salvataggio fallito: {exc}"))
+            return
+        self.toast_overlay.add_toast(
+            Adw.Toast.new(f"Lezione salvata in {path}")
+        )
 
     # -- ciclo di vita ------------------------------------------------------
     def do_close_request(self) -> bool:

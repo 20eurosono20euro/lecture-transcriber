@@ -87,6 +87,7 @@ DEFAULT_DESCRIPTIONS: dict[str, str] = {
     "toggle_insert": "Attiva/disattiva l'inserimento nel documento",
     "toggle_transparent": "Modalita' semitrasparente",
     "toggle_window": "Mostra/nascondi la finestra",
+    "toggle_always_on_top": "Tieni la finestra sopra le altre",
     "bookmark": "Crea un segnalibro",
     "jump_to_latest": "Torna al testo piu' recente",
 }
@@ -99,6 +100,7 @@ DEFAULT_ACCELERATORS: dict[str, str] = {
     "toggle_insert": "<Ctrl><Super>I",
     "toggle_transparent": "<Ctrl><Super>T",
     "toggle_window": "<Ctrl><Super>W",
+    "toggle_always_on_top": "<Ctrl><Super>P",
     "bookmark": "<Ctrl><Super>B",
     "jump_to_latest": "<Ctrl><Super>J",
 }

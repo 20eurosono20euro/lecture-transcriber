@@ -1046,6 +1046,7 @@ def _make_application_class():
                 "toggle_insert": self._toggle_insert,
                 "toggle_transparent": self._toggle_opacity,
                 "toggle_window": self._toggle_window,
+                "toggle_always_on_top": self._toggle_always_on_top,
                 "bookmark": self._bookmark_last,
                 "jump_to_latest": self._jump_to_latest,
             }
@@ -1084,6 +1085,9 @@ def _make_application_class():
                         "toggle_insert": "Attiva o disattiva l'inserimento",
                         "toggle_transparent": "Modalita' semitrasparente",
                         "toggle_window": "Mostra o nascondi la finestra",
+                        "toggle_always_on_top": (
+                            "Tieni la finestra sopra le altre"
+                        ),
                         "bookmark": "Crea un segnalibro",
                         "jump_to_latest": "Torna al testo piu' recente",
                     }
@@ -1169,6 +1173,19 @@ def _make_application_class():
                 self.window.hide()
             else:
                 self.window.present()
+
+        def _toggle_always_on_top(self) -> None:
+            """Accende o spegne il sempre-in-primo-piano da tastiera.
+
+            Passa dal tasto della barra superiore, non scrivendo la
+            preferenza a mano: cosi' lo stato mostrato, la preferenza e
+            l'estensione restano d'accordo per costruzione.
+            """
+            if self.window is None:
+                return
+            self.window.pin_button.set_active(
+                not self.window.pin_button.get_active()
+            )
 
         def _bookmark_last(self) -> None:
             if self.window is None:

@@ -82,6 +82,7 @@ class Settings:
             "toggle_insert": "<Ctrl><Super><Shift>I",
             "toggle_transparent": "<Ctrl><Super><Shift>T",
             "toggle_window": "<Ctrl><Super><Shift>V",
+            "toggle_always_on_top": "<Ctrl><Super><Shift>P",
             "bookmark": "<Ctrl><Super><Shift>B",
             "jump_to_latest": "<Ctrl><Super><Shift>L",
         }

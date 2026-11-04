@@ -153,6 +153,14 @@ window.lt-window {
     padding: 5px 8px;
     box-shadow: %(floating_shadow)s;
 }
+/* La variante su due file (modalita' sopra, comandi sotto): la capsula
+   non deve allargare la finestra, quindi il padding orizzontale si
+   stringe al minimo per far entrare la riga piu' larga dei comandi nei
+   420 px della finestra (misurato: una capsula a riga unica misurava
+   590 px di minimo e costringeva la finestra ad allargarsi). */
+.lt-floating-bar-vertical {
+    padding: 5px 3px;
+}
 
 /* ---- capsule di stato ----------------------------------------------- */
 .lt-capsule {
@@ -183,6 +191,21 @@ window.lt-window {
 .lt-capsule-quiet {
     background-color: alpha(currentColor, 0.07);
     color: alpha(@theme_fg_color, 0.65);
+}
+/* La pillola "torna all'ultimo testo": un pulsante galleggiante che
+   ricompare quando l'utente scorre via dal fondo. Riusa i token della
+   capsula accentata per restare coerente col resto dell'interfaccia. */
+.lt-rejoin {
+    background-color: alpha(@accent_color, 0.16);
+    color: @accent_color;
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: %(footnote)s;
+    font-weight: 600;
+}
+.lt-rejoin:hover {
+    background-color: alpha(@accent_color, 0.26);
 }
 
 /* ---- controllo segmentato ------------------------------------------- */
@@ -241,6 +264,28 @@ window.lt-window {
     outline: 2px solid alpha(@accent_color, 0.65);
     outline-offset: -2px;
     background-color: alpha(currentColor, 0.06);
+}
+/* Un pulsante a icona che e' un interruttore (il sempre-in-primo-piano)
+   deve dire il proprio stato a colpo d'occhio, non solo al passaggio del
+   mouse: spento e' un'icona grigia, acceso prende il colore accentato e un
+   fondo tinto. Senza questa regola i due stati erano distinguibili solo
+   dall'icona, che in un tema symbolic monocromo e' la stessa. */
+.lt-icon-button:checked {
+    background-color: alpha(@accent_color, 0.16);
+    color: @accent_color;
+}
+.lt-icon-button:checked:hover {
+    background-color: alpha(@accent_color, 0.22);
+    color: @accent_color;
+}
+.lt-icon-button:checked:focus-visible {
+    outline: 2px solid alpha(@accent_color, 0.65);
+    outline-offset: -2px;
+}
+/* Quando il comando non e' disponibile il pulsante non deve sembrare
+   rotto: si attenua e resta premibile (il messaggio lo da' il toast). */
+.lt-icon-button:disabled {
+    color: alpha(@theme_fg_color, 0.3);
 }
 /* Il pulsante primario: capsula piena, l'unico elemento fortemente
    colorato della finestra. */

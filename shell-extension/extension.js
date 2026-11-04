@@ -17,6 +17,11 @@
 //
 // L'applicazione lo chiama per attivare o disattivare il "sopra tutto"
 // della propria finestra.
+//
+// Oltre al sopra-tutto si chiede anche stick(): make_above() da solo
+// vale solo nello spazio di lavoro corrente, quindi cambiando workspace
+// la finestra non e' piu' sopra niente. stick() la fa seguire su tutti
+// gli spazi di lavoro (lo stesso ordine di chiamate di Firefox PIP).
 
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
@@ -104,7 +109,22 @@ export default class LectureTranscriberExtension extends Extension {
                 if (onTop) {
                     if (!window.above)
                         window.make_above();
+                    /* stick(): la finestra segue l'utente su tutti gli
+                     * spazi di lavoro. make_above() da solo la tiene
+                     * sopra le altre *nello spazio corrente*: passando
+                     * ad un altro workspace la finestra non c'e' piu' e
+                     * il sopra-tutto non serve a niente (prestato da
+                     * Firefox PIP, che fa le tre chiamate insieme).
+                     *
+                     * E' un'API interna di Meta.Window, non coperta da
+                     * nessun protocollo: se una versione di GNOME non la
+                     * espone, il try/catch la lascia cadere e
+                     * make_above() resta il minimo garantito. */
+                    if (!window.on_all_workspaces)
+                        window.stick();
                 } else {
+                    if (window.on_all_workspaces)
+                        window.unstick();
                     if (window.above)
                         window.unmake_above();
                 }
@@ -160,6 +180,8 @@ export default class LectureTranscriberExtension extends Extension {
     _resetWindows() {
         for (const window of this._candidateWindows()) {
             try {
+                if (window.on_all_workspaces)
+                    window.unstick();
                 if (window.above)
                     window.unmake_above();
             } catch (e) {

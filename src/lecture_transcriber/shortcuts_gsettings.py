@@ -72,6 +72,7 @@ KNOWN_SHORTCUT_IDS = frozenset(
         "toggle_insert",
         "toggle_transparent",
         "toggle_window",
+        "toggle_always_on_top",
         "bookmark",
         "jump_to_latest",
     }
