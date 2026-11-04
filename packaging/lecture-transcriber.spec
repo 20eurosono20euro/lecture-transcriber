@@ -18,14 +18,17 @@ BuildArch:      noarch
 #   python3.14, python3-gobject, gtk4, libadwaita, python3-numpy,
 #   python3-sounddevice, portaudio, python3-huggingface-hub.
 #
-# GRUPPO 2 — NON pacchettizzate in Fedora (verificato con
-#   `dnf list --available` su Fedora 44):
-#     * faster-whisper     (e la sua dipendenza ctranslate2)
-#     * python-soxr        (il risampionatore)
-#   Per queste non esiste un Requires: possibile. Vengono installate in un
-#   virtualenv creato dall'app al primo avvio (vedi %post), dentro
-#   ~/.local/share/lecture-transcriber/venv: nessun privilegio di root,
-#   nessun pip di sistema toccato, e l'ambiente resta dell'utente.
+# GRUPPO 1-bis — l'export in PDF ("Salva lezione") usa WeasyPrint, che su
+#   Fedora 44 NON e' pacchettizzato come python3-weasyprint (verificato:
+#   `rpm -q python3-weasyprint` -> non installato). Percio' nel percorso RPM
+#   lo installa il %post in un virtualenv, e qui restano solo le librerie
+#   di sistema che WeasyPrint carica a runtime. L'elenco non e' indovinato:
+#   viene da /proc/<pid>/maps mentre WeasyPrint rende un PDF su questa
+#   macchina (pango, harfbuzz, fontconfig, freetype, glib/gobject,
+#   libtiff, libwebp, libjpeg-turbo, libpng, libxml2, libbrotli, expat,
+#   zlib-ng-compat). Quasi tutte le tira gia' dentro gtk4/libadwaita, ma
+#   dichiararle evita il difetto opposto: un'installazione minimale dove
+#   il tasto PDF muore con un ImportError invece di funzionare.
 Requires:       python3.14 >= 3.14
 Requires:       python3-gobject
 Requires:       gtk4
@@ -36,6 +39,19 @@ Requires:       portaudio
 Requires:       python3-huggingface-hub
 Requires:       python3-pip
 Requires:       python3-virtualenv
+# Librerie di sistema di WeasyPrint (export PDF).
+Requires:       pango
+Requires:       harfbuzz
+Requires:       fontconfig
+Requires:       freetype
+Requires:       libtiff
+Requires:       libwebp
+Requires:       libjpeg-turbo
+Requires:       libpng
+Requires:       libxml2
+Requires:       libbrotli
+Requires:       expat
+Requires:       zlib-ng-compat
 # Solo suggerimenti: senza questi l'app funziona, con meno strade
 # di inserimento (vedi docs/installazione.md).
 Recommends:     ydotool

@@ -4,6 +4,7 @@
 #
 #   faster-whisper  -> motore Whisper (dipende da ctranslate2)
 #   soxr            -> risampionatore dell'audio
+#   weasyprint      -> export in PDF ("Salva lezione")
 #
 # Perche' un virtualenv e non il pip di sistema:
 #   * nessun privilegio di root (requisito del §8);
@@ -57,6 +58,17 @@ if ! "$PY" -m pip install --quiet --disable-pip-version-check \
     echo "  Controlla la connessione (i modelli e le librerie si scaricano" >&2
     echo "  una sola volta) e riavvia l'applicazione." >&2
     exit 1
+fi
+
+# WeasyPrint serve solo all'export in PDF. Se manca o non si installa
+# (rete assente, librerie di sistema assenti) l'app deve aprire lo stesso:
+# il tasto "Salva lezione" lo segnala con un messaggio chiaro invece di
+# impedire l'avvio. Percio' l'errore qui non esce con exit 1.
+if ! "$PY" -c "import weasyprint" >/dev/null 2>&1; then
+    "$PY" -m pip install --quiet --disable-pip-version-check \
+            --no-build-isolation weasyprint >&2 \
+        || echo "lecture-transcriber: WeasyPrint non installato," \
+               "l'export in PDF non sara' disponibile." >&2
 fi
 
 # --- verifica finale -----------------------------------------------------

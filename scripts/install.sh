@@ -61,7 +61,8 @@ log "Aggiorno pip"
 log "Installo le dipendenze Python"
 "$VENV/bin/pip" install \
     "numpy>=2.0" "sounddevice>=0.5" "soxr>=0.4" \
-    "faster-whisper>=1.2" "huggingface-hub"
+    "faster-whisper>=1.2" "huggingface-hub" \
+    "weasyprint>=60"
 
 log "Verifico l'ambiente"
 "$VENV/bin/python" - <<'PYEOF'
@@ -70,10 +71,12 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw
 import numpy, sounddevice, soxr, faster_whisper
+import weasyprint
 print(f"  GTK {Gtk.get_major_version()}.{Gtk.get_minor_version()}"
       f"  Adw {Adw.MAJOR_VERSION}.{Adw.MINOR_VERSION}"
       f"  numpy {numpy.__version__}"
-      f"  faster-whisper {faster_whisper.__version__}")
+      f"  faster-whisper {faster_whisper.__version__}"
+      f"  weasyprint {weasyprint.__version__}")
 PYEOF
 
 # --- launcher e file .desktop ------------------------------------------------

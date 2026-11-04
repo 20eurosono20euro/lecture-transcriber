@@ -20,6 +20,13 @@ Tutte le operazioni descritte qui sono state **provate su Fedora 44 / GNOME
 sudo dnf install python3-gobject gtk4 libadwaita python3-numpy portaudio libsoxr
 ```
 
+**Installate dallo script, non da `dnf`**: `faster-whisper`, `soxr` e
+`weasyprint` non sono pacchettizzate in Fedora 44 (verificato:
+`python3-weasyprint` non esiste nei repo). `install.sh` le mette nel
+virtualenv; `weasyprint` serve solo all'export in PDF, quindi se la sua
+installazione fallisce l'app si apre lo stesso e il tasto "Salva lezione"
+lo segnala con un messaggio chiaro.
+
 **Opzionali**:
 
 | Pacchetto | Serve per |
