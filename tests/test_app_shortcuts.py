@@ -49,6 +49,7 @@ class TestShortcutDispatch(unittest.TestCase):
             "_toggle_insert",
             "_toggle_opacity",
             "_toggle_window",
+            "_toggle_always_on_top",
             "_bookmark_last",
             "_jump_to_latest",
         ):
@@ -158,7 +159,7 @@ class TestGSettingsPreferredOverPortal(unittest.TestCase):
         self.assertIs(app._shortcuts, fake_portal)
         fake_portal.register.assert_called_once()
 
-    def test_all_six_shortcuts_are_registered(self) -> None:
+    def test_all_shortcuts_are_registered(self) -> None:
         app = _make_app()
         fake_manager = mock.MagicMock()
         fake_manager.register.return_value = True
@@ -185,6 +186,7 @@ class TestGSettingsPreferredOverPortal(unittest.TestCase):
         app._toggle_insert = lambda: None
         app._toggle_opacity = lambda: None
         app._toggle_window = lambda: None
+        app._toggle_always_on_top = lambda: None
         app._bookmark_last = lambda: None
         app._jump_to_latest = lambda: None
 
