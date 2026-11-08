@@ -12,7 +12,7 @@ cd ~/lecture-transcriber
 .venv/bin/python -m pytest tests/ -q
 ```
 
-**Risultato: 274 test e 16 subtest, tutti verdi.**
+**Risultato: 325 test e 17 subtest, tutti verdi.**
 
 | File | Copre |
 |---|---|
@@ -24,7 +24,8 @@ cd ~/lecture-transcriber
 | `test_audio.py` | cattura audio, buffering, gestione degli errori del dispositivo |
 | `test_shortcuts_gsettings.py` | percorso GSettings: parsing della lista, **validazione dei percorsi**, registrazione, rimozione, non toccare le scorciatoie dell'utente |
 | `test_app_shortcuts.py` | consegna della scorciatoia all'azione, GSettings preferito sul portal, interfaccia D-Bus coerente con `config.APP_ID` |
-| `test_ui_settings.py` | **il pannello preferenze: ogni gruppo costruito deve stare nella pagina, larghezza sufficiente per le etichette**, la consultazione discreta deve restare una modalita' e non una trappola (il commutatore Lettura/Appunti raggiungibile), registro audio spento per default |
+| `test_ui_settings.py` | **il pannello preferenze: ogni gruppo costruito deve stare nella pagina, larghezza sufficiente per le etichette**, la consultazione discreta deve restare una modalita' e non una trappola (il commutatore Lettura/Appunti raggiungibile), registro audio spento per default. **Anche: il tasto del sempre-in-primo-piano** (esiste, e' raggiungibile in tutte e tre le modalita', torna spento e non tocca la preferenza se l'estensione manca), la **pillola di ritorno** e la **seconda capsula di stato** sul transcript, l'export SRT con **anteprima prima di scrivere** |
+| `test_transcript_view.py` | la **vista del transcript**: l'ipotesi provvisoria scritta *in place* in coda all'ultimo segmento (non come riga nuova), `text_for()` che esclude il provvisorio, niente newline orfano dopo una sequenza, `last_line()` col testo committato |
 | `test_study.py` (esteso) | robustezza del modulo di studio: **file JSON non UTF-8 ignorato invece di far sollevare il costruttore**, estrazione del termine con la testa del sintagma, spezzatura in frasi con le abbreviazioni, **campi vuoti che non fanno scivolare l'indice della risposta** |
 | `test_launch_without_asr.py` | **il lancio con un tap senza numpy/soxr/sounddevice/faster-whisper**: il pacchetto si importa, `pipeline.open()` sopravvive, "ascolta" segnala l'errore invece di morire o tacere. Gira in un sotto-processo con `MetaPathFinder` che blocca i moduli prima dell'import |
 
@@ -252,7 +253,12 @@ Atspi.TextGranularity.LINE)`, che restituisce un `Atspi.TextRange` con
 
 - **Always-on-top**: richiede l'estensione GNOME Shell, che va installata e
   abilitata dall'utente; il meccanismo D-Bus e' implementato ma la verifica
-  end-to-end richiede un riavvio della sessione.
+  end-to-end richiede un riavvio della sessione. L'estensione chiede anche
+  `stick()`/`unstick()` accanto a `make_above()`: `make_above()` da solo
+  tiene la finestra sopra le altre **solo nello spazio di lavoro corrente**,
+  cambiando workspace non e' piu' sopra niente. Verificato che `stick`,
+  `unstick` e `on_all_workspaces` esistano nel typelib Meta-18 di mutter
+  (grep binario), ma non che reggano un cambio di workspace dal vivo.
 - **Click-through e blur**: impossibili su GNOME 50, non c'e' nulla da testare.
 - **Scorciatoie globali**: la catena e' stata verificata end-to-end *eseguendo
   il comando* che `gnome-settings-daemon` eseguirebbe alla pressione del tasto

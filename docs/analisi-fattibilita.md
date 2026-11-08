@@ -529,7 +529,7 @@ non vuole root).
 | Salvataggio automatico, export TXT/MD/SRT | ✅ garantito |
 | Inserimento in LibreOffice Writer | ✅ garantito (UNO, verificato) |
 | Inserimento in editor GTK | ✅ garantito (at-spi, verificato) |
-| Sempre in primo piano | ⚠️ **richiede l'estensione GNOME** (o la voce di menu) |
+| Sempre in primo piano | ⚠️ **richiede l'estensione GNOME**, ma e' gia' un **tasto** nella barra superiore (icona a spillo): si accende e si spegne su richiesta, anche durante una lezione. Senza estensione il tasto si disattiva con un avviso |
 | Inserimento in Obsidian/Electron | ⚠️ **richiede sudo** (regola udev + gruppo `input`) |
 | Click-through | ❌ **impossibile** su GNOME 50 Wayland |
 | Blur di sfondo | ❌ **impossibile** (Mutter 51+) |

@@ -36,17 +36,26 @@ qualsiasi editor.
 ## Cosa fa
 
 - **Trascrive in tempo reale in italiano**, interamente sul computer, con
-  Whisper (`large-v3-turbo` int8, circa 2 GB di RAM).
+  Whisper (`large-v3-turbo` int8, circa 2 GB di RAM). L'ipotesi provvisoria
+  esce in ~3 s e scorre *in place*, in coda all'ultimo segmento — nessun
+  "salto di riga" fra ipotesi e testo finale.
 - **Finestra flottante** che si puo' spostare, ridimensionare, compattare e
-  rendere semitrasparente; resta visibile sopra il programma di scrittura.
+  rendere semitrasparente.
+- **Sempre in primo piano con un tasto** (l'icona a spillo nella barra
+  superiore): si accende e si spegne su richiesta, anche durante una
+  lezione. Richiede l'estensione GNOME in `shell-extension/`; se manca, il
+  tasto torna spento e lo dice con un avviso — senza estensione l'app
+  funziona lo stesso.
 - **Due modalita' distinte**: *consultazione discreta* (semitrasparente, per
   leggere) e *presa di appunti assistita* (interattiva, con i controlli).
 - **Cronologia consultabile** con ricerca, timestamp per segmento, segnalibri
-  e note rapide.
+  e note rapide. Scorrendo via dal fondo compare una pillola "Torna
+  all'ultimo testo" per riallinearsi.
 - **Inserimento controllato** nel documento: disattivato di default, e quando
   e' attivo scrive solo nella finestra che avevi registrato.
 - **Scorciatoie globali** (via il `media-keys` di GSettings), configurabili.
-- **Export** in TXT, Markdown, Markdown con timestamp e SRT.
+- **Export** in TXT, Markdown, Markdown con timestamp e SRT, con anteprima
+  del contenuto prima di scrivere il file.
 - **Salvataggio automatico** in SQLite: nessuna lezione persa.
 
 ---
@@ -103,7 +112,9 @@ Whisper int8 (large-v3-turbo)  ───▶  testo provvisorio (live) + testo fi
 
 La **decodifica Whisper dura ~3 secondi** ed e' costante (la finestra e'
 sempre di 30 s): e' la latenza reale fra la fine di una frase e la sua
-comparsa. L'ipotesi provvisoria mostra le prime parole prima.
+comparsa. L'ipotesi provvisoria mostra le prime parole prima, scorrendo
+in coda all'ultimo segmento invece che come riga nuova — quando arriva il
+testo finale le stesse parole non ricompaiono una riga piu' su.
 
 Esiste anche un ASR **streaming** italiano (Zipformer2, RTF 0,017: prima
 ipotesi in 40 ms), ma ha WER 19,1 % contro 7,0 %, non produce punteggiatura
@@ -122,7 +133,7 @@ per ispezione del binario e test dal vivo, non assunte:
 | Funzionalita' | Stato |
 |---|---|
 | Semitrasparenza | ✅ `set_opacity` |
-| Sempre in primo piano | ⚠️ **serve l'estensione GNOME** in `shell-extension/` |
+| Sempre in primo piano | ✅ **con un tasto** (icona a spillo in barra); richiede l'estensione in `shell-extension/`, altrimenti il tasto si disattiva con un avviso |
 | Click-through (clic ignorati) | ❌ impossibile su GNOME 50 Wayland |
 | Blur di sfondo | ❌ arriva solo con GNOME 51 |
 | Scorciatoie globali | ✅ via GSettings `media-keys` (verificato) |
@@ -147,9 +158,11 @@ src/lecture_transcriber/
     sessions.py    archivio SQLite (sessioni, segmenti, segnalibri, note)
     insertion.py   inserimento UNO / at-spi / ydotool / clipboard
     export.py      esportazione TXT, Markdown, SRT
+    pdf_export.py  export in PDF ("Salva lezione", con WeasyPrint)
     study.py       riepilogo, concetti, definizioni, flashcard, dizionario
     shortcuts.py         scorciatoie globali via portal GlobalShortcuts
     shortcuts_gsettings.py  scorciatoie globali via GSettings media-keys
+    theme.py       foglio di stile e primitivi di design (capsule, togli)
     ui.py          finestra flottante GTK4 + libadwaita
     app.py         orchestrazione: worker di cattura, ASR e inserimento
 shell-extension/  estensione GNOME per il sempre-in-primo-piano
