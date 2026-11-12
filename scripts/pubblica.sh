@@ -18,7 +18,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REMOTE="git@github.com:neokov/lecture-transcriber.git"
+REMOTE="git@github.com:20eurosono20euro/lecture-transcriber.git"
 ONLY_CHECK=0
 [[ "${1:-}" == "--verifica" ]] && ONLY_CHECK=1
 
@@ -82,11 +82,11 @@ git push -u origin main 2>&1 | sed 's/^/    /'
 log "Pubblicato."
 cat <<EOF
 
-Il progetto e' su https://github.com/neokov/lecture-transcriber
+Il progetto e' su https://github.com/20eurosono20euro/lecture-transcriber
 
 Da qualsiasi PC con Fedora:
 
-    git clone https://github.com/neokov/lecture-transcriber.git
+    git clone https://github.com/20eurosono20euro/lecture-transcriber.git
     cd lecture-transcriber
     ./scripts/install.sh
 

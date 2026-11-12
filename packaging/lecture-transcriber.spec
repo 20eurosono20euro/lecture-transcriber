@@ -1,4 +1,4 @@
-%global forgeurl https://github.com/neokov/lecture-transcriber
+%global forgeurl https://github.com/20eurosono20euro/lecture-transcriber
 %global modulename lecture_transcriber
 
 Name:           lecture-transcriber

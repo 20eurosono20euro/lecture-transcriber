@@ -65,7 +65,7 @@ qualsiasi editor.
 Da un PC qualsiasi con **Fedora 44** (o simile con GTK4/libadwaita):
 
 ```bash
-git clone https://github.com/neokov/lecture-transcriber.git
+git clone https://github.com/20eurosono20euro/lecture-transcriber.git
 cd lecture-transcriber
 ./scripts/install.sh
 ```
