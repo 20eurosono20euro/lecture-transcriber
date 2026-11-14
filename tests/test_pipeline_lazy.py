@@ -21,6 +21,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from typing import Callable
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -68,8 +69,12 @@ class FakeEngine:
             self.on_ready()
 
 
-def _make_pipeline() -> TranscriptionPipeline:
-    return TranscriptionPipeline(PipelineConfig(), PipelineCallbacks())
+def _make_pipeline(
+    dispatcher: Callable[[Callable[[], None]], None] | None = None,
+) -> TranscriptionPipeline:
+    return TranscriptionPipeline(
+        PipelineConfig(), PipelineCallbacks(), dispatcher=dispatcher
+    )
 
 
 class TestOpenDoesNotLoadTheModel(unittest.TestCase):
@@ -167,17 +172,17 @@ class TestPendingStartIsHonoured(unittest.TestCase):
 
     def test_model_ready_restarts_when_a_start_was_pending(self) -> None:
         """Il callback di fine caricamento deve rilanciare start()."""
-        pipeline = _make_pipeline()
+        calls: list = []
+        pipeline = _make_pipeline(dispatcher=lambda fn: calls.append(fn))
         pipeline.open()
         fake = FakeEngine()
         pipeline._engine = fake
         pipeline.start()
         self.assertTrue(pipeline._start_when_ready)
 
-        with mock.patch("gi.repository.GLib.idle_add") as idle:
-            fake.finish_load()
+        fake.finish_load()
 
-        idle.assert_called_once()
+        self.assertEqual(len(calls), 1)
         self.assertFalse(pipeline._start_when_ready)
 
     def test_load_error_clears_the_pending_flag(self) -> None:
@@ -204,6 +209,39 @@ class TestPendingStartIsHonoured(unittest.TestCase):
         pipeline._on_model_ready()
         self.assertFalse(pipeline._start_when_ready)
         self.assertEqual(pipeline.state, ListenerState.ERROR)
+
+
+class TestDefaultDispatcher(unittest.TestCase):
+    """Il dispatcher predefinito puo' girare senza GTK (fallback inline).
+
+    E' il cuore della portabilita': una pipeline costruita su una
+    macchina senza PyGObject deve comunque onorare la richiesta di
+    ascolto pendente eseguendo la funzione direttamente sul thread di
+    caricamento, invece di tacerla.
+    """
+
+    def test_default_dispatcher_executes_inline_when_gi_missing(self) -> None:
+        calls: list = []
+        dispatched = appmod._default_dispatcher()
+
+        with mock.patch.dict("sys.modules", {"gi": None}):
+            # simuliamo l'assenza di gi: l'import fallisce e il dispatcher
+            # deve eseguire inline
+            dispatched(lambda: calls.append("ok"))
+
+        self.assertEqual(calls, ["ok"])
+
+    def test_default_dispatcher_prefers_idle_add_when_gi_present(self) -> None:
+        calls: list = []
+        dispatched = appmod._default_dispatcher()
+
+        # quando gi esiste, il dispatcher deve passare dal main loop:
+        # simuliamo con un idle_add finto
+        with mock.patch(
+            "gi.repository.GLib.idle_add", lambda fn: calls.append(fn)
+        ):
+            dispatched(lambda: None)
+        self.assertEqual(len(calls), 1)
 
 
 class _FakeCapture:

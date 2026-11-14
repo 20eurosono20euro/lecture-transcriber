@@ -124,6 +124,31 @@ class PipelineConfig:
     join_timeout_s: float = 15.0
 
 
+def _default_dispatcher() -> Callable[[Callable[[], None]], None]:
+    """Dispatcher predefinito: main loop GTK se raggiungibile, altrimenti inline.
+
+    Ritorna una chiusura che, data una funzione, la esegue nel main loop
+    GTK ``GLib.idle_add`` quando PyGObject e' importabile (Linux+GNOME);
+    se GTK manca, la esegue direttamente sul thread corrente. In questo
+    modo la pipeline non dipende piu' da GTK per funzionare: il main loop
+    e' solo il veicolo preferito, non un requisito.
+    """
+
+    def dispatch(fn: Callable[[], None]) -> None:
+        try:
+            import gi
+
+            gi.require_version("GLib", "2.0")
+            from gi.repository import GLib
+
+            GLib.idle_add(fn)
+            return
+        except Exception:
+            fn()
+
+    return dispatch
+
+
 class TranscriptionPipeline:
     """Pipeline di trascrizione indipendente dalla GUI.
 
@@ -148,9 +173,15 @@ class TranscriptionPipeline:
         self,
         cfg: PipelineConfig | None = None,
         callbacks: PipelineCallbacks | None = None,
+        dispatcher: Callable[[Callable[[], None]], None] | None = None,
     ) -> None:
         self.cfg = cfg or PipelineConfig()
         self.cb = callbacks or PipelineCallbacks()
+        # Chi riceve gli eventi decide su quale thread eseguirli. Di default
+        # si usa il main loop GTK quando c'e' (Linux+GNOME): senza GTK il
+        # codice gira comunque, eseguendo inline. Un client headless (CLI,
+        # test, backend Windows/macOS) puo' iniettare un dispatcher proprio.
+        self._dispatcher = dispatcher or _default_dispatcher()
 
         self.state = ListenerState.IDLE
         self.error_message: str = ""
@@ -339,9 +370,7 @@ class TranscriptionPipeline:
         # richiesta era stata messa in attesa: ora si puo' onorare.
         if self._start_when_ready:
             self._start_when_ready = False
-            from gi.repository import GLib
-
-            GLib.idle_add(self._start_after_load)
+            self._dispatcher(self._start_after_load)
 
     def _start_after_load(self) -> bool:
         """Onora la richiesta di ascolto arrivata durante il caricamento.
