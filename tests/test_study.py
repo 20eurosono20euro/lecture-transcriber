@@ -299,7 +299,7 @@ class TestEndpointIsLocal(unittest.TestCase):
 
     def test_a_private_network_address_is_not_local(self) -> None:
         """192.168.x e' un'altra macchina della rete, non questo computer."""
-        self.assertFalse(LocalLLMBackend("http://192.168.1.5/v1").is_local())
+        self.assertFalse(LocalLLMBackend("http://192.168.77.5/v1").is_local())
 
     def test_a_remote_endpoint_is_refused_for_privacy(self) -> None:
         backend = LocalLLMBackend("https://api.example.com/v1")
