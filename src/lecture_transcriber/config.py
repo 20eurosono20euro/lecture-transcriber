@@ -9,15 +9,76 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 APP_ID = "it.lecturetranscriber.App"
 APP_NAME = "Lecture Transcriber"
 
-XDG_DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-XDG_CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-XDG_CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+
+def _platform_home_dirs(platform: str, env: dict[str, str], home: Path):
+    r"""Sceglie le cartelle base di dati, configurazione e cache per l'OS.
+
+    Cross-platform (verificato contro le convenzioni ufficiali):
+
+    * **Linux/altro**: XDG. ``~/.local/share`` per i dati, ``~/.config`` per
+      la configurazione, ``~/.cache`` per la cache. Rispettano le variabili
+      ``XDG_DATA_HOME``/``XDG_CONFIG_HOME``/``XDG_CACHE_HOME`` (sostituiscono
+      il default, non lo aggiungono).
+    * **Windows**: ``%APPDATA%`` per i dati e la configurazione,
+      ``%LOCALAPPDATA%`` per la cache. Su Windows la "Application Data" di
+      ogni utente e' l'analogo di ``~/.config``; i dati che devono essere
+      sincronizzati con il profilo vanno li' (sessioni, preferenze), mentre
+      la cache no (puo' essere ricreata).
+    * **macOS**: ``~/Library/Application Support`` per i dati e la
+      configurazione, ``~/Library/Caches`` per la cache — il percorso
+      *canonico* che Foundation/``FileManager`` usano e che Apple
+      raccomanda (``NSApplicationSupportDirectory``/``NSCachesDirectory``).
+
+    La funzione e' pura (nessun accesso a ``os.environ``/``Path.home()``
+    reale): riceve tutto come parametri, cosi' i test possono simulare un
+    altro sistema operativo senza toccare la macchina che gira.
+    """
+    if platform.startswith("win"):
+        appdata = env.get("APPDATA")
+        localappdata = env.get("LOCALAPPDATA")
+        # Se uno dei due manca (es. in un ambiente minimale), si crolla
+        # su un percorso sensato dentro la home invece di un path vuoto.
+        base_data = Path(appdata) if appdata else home / "AppData" / "Roaming"
+        base_cache = (
+            Path(localappdata) if localappdata else home / "AppData" / "Local"
+        )
+        return {
+            "data": base_data,
+            "config": base_data,
+            "cache": base_cache,
+        }
+    if platform == "darwin":
+        return {
+            "data": home / "Library" / "Application Support",
+            "config": home / "Library" / "Application Support",
+            "cache": home / "Library" / "Caches",
+        }
+    # Linux e tutto il resto: XDG.
+    xdg_data = env.get("XDG_DATA_HOME")
+    xdg_config = env.get("XDG_CONFIG_HOME")
+    xdg_cache = env.get("XDG_CACHE_HOME")
+    return {
+        "data": Path(xdg_data) if xdg_data else home / ".local" / "share",
+        "config": Path(xdg_config) if xdg_config else home / ".config",
+        "cache": Path(xdg_cache) if xdg_cache else home / ".cache",
+    }
+
+
+# Calcolati all'import come prima, ma ora consapevoli della piattaforma.
+_platform = _platform_home_dirs(
+    sys.platform, os.environ, Path.home()
+)
+
+XDG_DATA = _platform["data"]
+XDG_CONFIG = _platform["config"]
+XDG_CACHE = _platform["cache"]
 
 DATA_DIR = Path(os.environ.get("LT_DATA_DIR", XDG_DATA / "lecture-transcriber"))
 CONFIG_DIR = Path(os.environ.get("LT_CONFIG_DIR", XDG_CONFIG / "lecture-transcriber"))
