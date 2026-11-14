@@ -287,5 +287,51 @@ class TestListInputDevices(unittest.TestCase):
             self.assertEqual(list_input_devices(), [])
 
 
+class TestVirtualNoiseNode(unittest.TestCase):
+    """Il filtro dei nodi virtuali e' consapevole della piattaforma.
+
+    Su Linux i nomi di PipeWire vanno esclusi; su Windows/macOS quei nomi
+    non esistono, quindi il filtro non deve mai scartare un device — un
+    microfono chiamato "default" (raro ma possibile) su un altro OS e'
+    un device reale, non un nodo del server audio.
+    """
+
+    def test_linux_excludes_pipewire_nodes(self) -> None:
+        self.assertTrue(
+            audio_module._is_virtual_noise_node("pipewire", "linux")
+        )
+        self.assertTrue(
+            audio_module._is_virtual_noise_node("default", "linux")
+        )
+        self.assertTrue(
+            audio_module._is_virtual_noise_node("sysdefault", "linux")
+        )
+
+    def test_linux_keeps_real_device_names(self) -> None:
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("USB Microphone", "linux")
+        )
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("Built-in Audio", "linux")
+        )
+
+    def test_windows_keeps_everything(self) -> None:
+        # su Windows anche "default" e' (teoricamente) un device reale
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("default", "win32")
+        )
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("Microphone Array", "win32")
+        )
+
+    def test_macos_keeps_everything(self) -> None:
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("default", "darwin")
+        )
+        self.assertFalse(
+            audio_module._is_virtual_noise_node("MacBook Air Microphone", "darwin")
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

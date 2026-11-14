@@ -17,6 +17,7 @@ Strategia (verificata su Fedora 44, GNOME 50, PipeWire 1.6.9):
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -124,6 +125,22 @@ class InputDevice:
     is_default: bool
 
 
+def _is_virtual_noise_node(name: str, platform: str | None = None) -> bool:
+    """Vero se ``name`` e' un nodo virtuale, non un microfono fisico.
+
+    Su Linux i nodi "pipewire", "default" e "sysdefault" sono creati dal
+    server audio e non corrispondono a un microfono. Su Windows/macOS quei
+    nomi non esistono, quindi il filtro e' innocuo (non esclude mai un
+    device reale) ma resta per difesa. ``platform`` e' iniettabile per i
+    test; di default si usa la piattaforma reale.
+    """
+    if platform is None:
+        platform = sys.platform
+    if platform.startswith("linux"):
+        return name in ("pipewire", "default", "sysdefault")
+    return False
+
+
 def list_input_devices() -> list[InputDevice]:
     """Elenca i dispositivi di cattura fisici (esclude i nodi virtuali).
 
@@ -153,8 +170,10 @@ def list_input_devices() -> list[InputDevice]:
         if info.get("max_input_channels", 0) < 1:
             continue
         name = str(info.get("name", ""))
-        # i nodi virtuali di PipeWire non sono microfoni fisici
-        if name in ("pipewire", "default", "sysdefault"):
+        # i nodi virtuali (PipeWire su Linux) non sono microfoni fisici.
+        # Su Windows/macOS il filtro e' innocuo: nessun device si chiama
+        # cosi'.
+        if _is_virtual_noise_node(name):
             continue
         devices.append(
             InputDevice(
