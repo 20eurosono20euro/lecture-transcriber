@@ -3,6 +3,10 @@
 .venv/
 venv/
 
+# Virtualenv creati dagli script di build cross-platform (mac/win).
+.venv-mac/
+.venv-win/
+
 # I modelli Whisper sono ~1,6 GB e si scaricano da Hugging Face al primo
 # avvio. Versionarli gonfierebbe il repo di ordini di grandezza.
 models/*
