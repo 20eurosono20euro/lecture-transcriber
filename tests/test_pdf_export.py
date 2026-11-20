@@ -4,10 +4,12 @@ Il tasto salva la lezione in ``~/Documents`` come PDF. Qui si controlla la
 parte pura — preparazione dell'HTML e scrittura del file — separata
 dall'interfaccia.
 
-La scrittura del PDF reale richiede WeasyPrint, che e' una dipendenza di
-sistema (Fedora: ``python3-weasyprint``). Se non c'e', il PDF non si crea
-ma l'app resta funzionante: i test che toccano ``save_pdf`` vengono quindi
-saltati quando WeasyPrint manca, mentre quelli sul solo HTML girano sempre.
+La scrittura del PDF reale richiede WeasyPrint: su Fedora 44 **non** e'
+pacchettizzato come ``python3-weasyprint``, lo installa
+``scripts/ensure-venv.sh`` nel virtualenv dell'utente. Se non c'e', il PDF
+non si crea ma l'app resta funzionante: i test che toccano ``save_pdf``
+vengono quindi saltati quando WeasyPrint manca, mentre quelli sul solo
+HTML girano sempre.
 """
 
 from __future__ import annotations
@@ -103,7 +105,7 @@ class PdfExportTestCase(unittest.TestCase):
         )
         self.assertIn("a &lt; b &amp;&amp; c &gt; d", html_text)
 
-    @unittest.skipUnless(HAVE_WEASYPRINT, "serve WeasyPrint (python3-weasyprint)")
+    @unittest.skipUnless(HAVE_WEASYPRINT, "serve WeasyPrint (scripts/ensure-venv.sh lo installa nel venv)")
     def test_save_pdf_writes_a_valid_pdf(self) -> None:
         out = Path(tempfile.mktemp(suffix=".pdf"))
         try:
@@ -118,7 +120,7 @@ class PdfExportTestCase(unittest.TestCase):
             except OSError:
                 pass
 
-    @unittest.skipUnless(HAVE_WEASYPRINT, "serve WeasyPrint (python3-weasyprint)")
+    @unittest.skipUnless(HAVE_WEASYPRINT, "serve WeasyPrint (scripts/ensure-venv.sh lo installa nel venv)")
     def test_save_pdf_creates_parent_directories(self) -> None:
         out = Path(tempfile.mkdtemp()) / "nidificate" / "lezione.pdf"
         try:

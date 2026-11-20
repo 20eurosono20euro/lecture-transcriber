@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     # Un tap dall'icona deve produrre una finestra, non un terminale.
     missing_asr = _missing(_ASR_MODULES)
     if missing_asr:
+        from lecture_transcriber import config
+
         print(
             "lecture-transcriber: riconoscimento vocale non disponibile "
             "(manca: " + ", ".join(missing_asr) + ").",
@@ -81,10 +83,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             "  L'app si apre comunque: cronologia, ricerca, esportazione e\n"
-            "  correzioni funzionano. Per trascrivere esegui:\n"
-            "    /usr/share/lecture-transcriber/scripts/ensure-venv.sh",
+            "  correzioni funzionano. Per trascrivere esegui:",
             file=sys.stderr,
         )
+        # percorso valido per il layout in cui gira davvero: relativo al
+        # clone, oppure /usr/share/... nel pacchetto RPM
+        print(f"    {config.ensure_venv_hint()}", file=sys.stderr)
 
     return run_app(argv)
 

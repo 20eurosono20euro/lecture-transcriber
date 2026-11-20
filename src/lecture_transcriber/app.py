@@ -49,6 +49,7 @@ from .audio import AudioCapture
 
 logger = logging.getLogger(__name__)
 from .insertion import InsertMethod, InsertResult, TextInserter, active_window_title
+from .recorder import WavRecorder
 from .sessions import SessionStore
 
 
@@ -193,6 +194,8 @@ class TranscriptionPipeline:
         self._engine: TranscriptionEngine | None = None
         self._segmenter: Segmenter | None = None
         self._capture: AudioCapture | None = None
+        # registrazione audio opzionale (``Settings.record_audio``)
+        self._recorder: WavRecorder | None = None
 
         self._engine_lock = threading.Lock()
         self._partial_lock = threading.Lock()
@@ -345,8 +348,8 @@ class TranscriptionPipeline:
             if not self.error_message:
                 self._set_state(
                     ListenerState.ERROR,
-                    "Riconoscimento vocale non disponibile: "
-                    "esegui scripts/ensure-venv.sh.",
+                    "Riconoscimento vocale non disponibile: esegui "
+                    f"{_config.ensure_venv_hint()}.",
                 )
             return
         if engine.is_ready or engine.is_loading:
@@ -400,8 +403,8 @@ class TranscriptionPipeline:
             if not self.error_message:
                 self._set_state(
                     ListenerState.ERROR,
-                    "Riconoscimento vocale non disponibile: "
-                    "esegui scripts/ensure-venv.sh.",
+                    "Riconoscimento vocale non disponibile: esegui "
+                    f"{_config.ensure_venv_hint()}.",
                 )
                 if self.cb.on_error is not None:
                     self.cb.on_error(self.error_message)
@@ -447,6 +450,9 @@ class TranscriptionPipeline:
                 self.session.course, self.session.professor, self.session.date
             )
             self.session.session_id = sid
+
+        # dopo la creazione della sessione: il nome del WAV usa il suo id
+        self._open_recorder()
 
         self._segment_index = 0
         self._last_partial_at = 0.0
@@ -512,6 +518,11 @@ class TranscriptionPipeline:
         self._stop_level_timer()
         self._stop_target_watcher()
 
+        # il WAV si chiude dopo il join: il thread di cattura potrebbe
+        # avere ancora l'ultimo blocco in mano.
+        recorder = self._recorder
+        self._close_recorder()
+
         if self._store is not None and self.session.session_id is not None:
             try:
                 self._store.end_session(self.session.session_id)
@@ -520,7 +531,13 @@ class TranscriptionPipeline:
 
         self._elapsed = self.elapsed
         self._session_start = 0.0
-        self._set_state(ListenerState.STOPPED, self._drop_summary(capture))
+        parts = [
+            self._drop_summary(capture),
+            self._recording_summary(recorder),
+        ]
+        self._set_state(
+            ListenerState.STOPPED, " ".join(p for p in parts if p)
+        )
 
     @staticmethod
     def _drop_summary(capture: object) -> str:
@@ -563,6 +580,7 @@ class TranscriptionPipeline:
         """Rilascia le risorse. Chiamabile anche senza aver avviato nulla."""
         if self.state in (ListenerState.LISTENING, ListenerState.PAUSED):
             self.stop()
+        self._close_recorder()
         self._stop_level_timer()
         self._stop_target_watcher()
         if self._store is not None:
@@ -686,6 +704,10 @@ class TranscriptionPipeline:
                 continue
             if self._pause_flag.is_set():
                 continue
+            # solo i blocchi che alimentano la trascrizione finiscono anche
+            # nel WAV: cosi' la registrazione e il transcript coprono lo
+            # stesso intervallo (una pausa non aggiunge audio fantasma).
+            self._record_block(block)
             try:
                 closed = self._segmenter.push(block) if self._segmenter else None
             except Exception as exc:
@@ -906,6 +928,98 @@ class TranscriptionPipeline:
         self._set_state(ListenerState.ERROR, message)
         if self.cb.on_error is not None:
             self.cb.on_error(message)
+
+    def _warn(self, message: str) -> None:
+        """Segnala un problema senza fermare la sessione.
+
+        ``_report_error`` porta lo stato in ERROR: giusto quando la
+        trascrizione non puo' continuare, sbagliato per un extra come la
+        registrazione audio. Il messaggio arriva comunque all'interfaccia
+        (toast), cosi' l'utente sa che il WAV non sta crescendo.
+        """
+        if self.cb.on_error is not None:
+            self.cb.on_error(message)
+
+    # -- registrazione audio opzionale --------------------------------------
+    def set_record_audio(self, enabled: bool) -> None:
+        """Accende o spegne la registrazione anche a sessione in corso.
+
+        La casella nelle preferenze e' azionabile mentre si ascolta: se il
+        cambio valesse solo dal prossimo "ascolta", l'utente crederebbe di
+        registrare e non registrerebbe (o viceversa). Aprendo il file qui
+        il comportamento segue subito la preferenza.
+        """
+        self.cfg.settings.record_audio = bool(enabled)
+        if not enabled:
+            self._close_recorder()
+            return
+        if self.state in (ListenerState.LISTENING, ListenerState.PAUSED):
+            self._open_recorder()
+
+    @property
+    def recording_path(self) -> Path | None:
+        """Il WAV aperto adesso, o ``None`` se non si sta registrando."""
+        recorder = self._recorder
+        return recorder.path if recorder is not None else None
+
+    def _open_recorder(self) -> None:
+        """Apre il WAV della sessione se ``record_audio`` e' acceso.
+
+        La preferenza prometteva ``AUDIO_DIR/<sessione>.wav`` e non lo
+        produceva: la casella si accendeva, il toast diceva "l'audio viene
+        scritto su disco" e non veniva scritto un byte. Qui la promessa si
+        mantiene.
+
+        Un errore di apertura (disco pieno, permessi) **non** ferma la
+        trascrizione: si avvisa e si prosegue senza registrazione. Il
+        transcript e' il prodotto principale, il WAV e' un extra.
+        """
+        self._close_recorder()
+        if not self.cfg.settings.record_audio:
+            return
+        session_id = self.session.session_id
+        if session_id is not None:
+            name = f"lezione-{session_id}.wav"
+        else:
+            # nessuno store (Uso senza database): il nome resta riconoscibile
+            name = time.strftime("lezione-%Y%m%d-%H%M%S.wav", time.localtime())
+        recorder = WavRecorder(
+            _config.AUDIO_DIR / name, self.cfg.settings.target_rate
+        )
+        try:
+            recorder.open()
+        except Exception as exc:
+            self._warn(f"Registrazione audio non avviata: {exc}")
+            return
+        self._recorder = recorder
+
+    def _record_block(self, block) -> None:  # noqa: ANN001 - np.ndarray
+        """Scrive un blocco nel WAV, se la registrazione e' attiva."""
+        recorder = self._recorder
+        if recorder is None:
+            return
+        try:
+            recorder.write(block)
+        except Exception as exc:
+            # un errore di scrittura (disco pieno) e' definitivo: il file
+            # resterebbe troncato e ogni blocco successivo fallirebbe. Si
+            # chiude e si dice una volta sola.
+            self._close_recorder()
+            self._warn(f"Registrazione audio interrotta: {exc}")
+
+    def _close_recorder(self) -> None:
+        recorder, self._recorder = self._recorder, None
+        if recorder is not None:
+            recorder.close()
+
+    @staticmethod
+    def _recording_summary(recorder: WavRecorder | None) -> str:
+        """Dice dove e' finito l'audio, se ne e' stato registrato."""
+        if recorder is None or recorder.frames_written <= 0:
+            return ""
+        rate = max(int(recorder.sample_rate), 1)
+        seconds = recorder.frames_written / rate
+        return f"Audio salvato in {recorder.path} ({seconds:.0f} s)."
 
 
 # ---------------------------------------------------------------------------

@@ -30,9 +30,11 @@ from __future__ import annotations
 import gi
 
 gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gdk, Gtk  # noqa: E402
+# Adw non e' importato: questo modulo non lo usa piu' da quando i colori del
+# tema si risolvono con una sonda CSS + ``Gtk.Widget.get_color()`` invece che
+# con ``Adw.StyleManager`` (vedi :func:`resolve_named_color`).
+from gi.repository import Gdk, Gtk  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # gettoni (token)
@@ -474,6 +476,21 @@ window.lt-window {
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
 }
+
+/* ---- sonde per la risoluzione dei colori ---------------------------- */
+/* Servono a :func:`resolve_named_color`: un widget vestito con queste
+   classi espone in ``get_color()`` il colore *effettivo* del tema dopo
+   la cascata CSS. I nomi ``@...`` non sono risolvibili nei tag di
+   ``Gtk.TextBuffer``, ma lo sono qui. */
+.lt-probe-accent {
+    color: @accent_color;
+}
+.lt-probe-fg {
+    color: @theme_fg_color;
+}
+.lt-probe-ins {
+    color: @insensitive_fg_color;
+}
 """
 
 
@@ -517,6 +534,10 @@ def install() -> bool:
     Gtk.StyleContext.add_provider_for_display(
         display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
     )
+    global _INSTALLED
+    _INSTALLED = True
+    # eventuali fallback risolti prima dell'installazione non valgono piu'
+    _CACHE.clear()
     return True
 
 
@@ -526,31 +547,59 @@ def install() -> bool:
 
 _CACHE: dict[str, str] = {}
 
+#: Nomi di colore che si sanno risolvere, e la classe CSS che li espone a
+#: ``Gtk.Widget.get_color()``. La mappa esiste perche' i tag di
+#: ``Gtk.TextBuffer`` non accettano ``@nome``: serve il valore concreto,
+#: e l'unico modo non deprecato per ottenerlo e' far calcolare il colore
+#: a un widget vero con una dichiarazione CSS che usa quel nome.
+_PROBES: dict[str, str] = {
+    "accent_color": "lt-probe-accent",
+    "theme_fg_color": "lt-probe-fg",
+    "insensitive_fg_color": "lt-probe-ins",
+}
+
+#: Vero dopo una :func:`install` riuscita. Senza il nostro foglio di
+#: stile le classi ``lt-probe-*`` non esistono e la sonda restituirebbe
+#: il colore ereditato (bianco in tema scuro, nero in tema chiaro), che
+#: non e' il colore del nome richiesto: in quel caso si usa il fallback.
+_INSTALLED = False
+
 
 def resolve_named_color(name: str, fallback: str) -> str:
     """Risolve un nome di colore del tema in un RGBA esplicito.
 
     I tag di ``Gtk.TextBuffer`` accettano solo colori concreti: un
     ``foreground="@accent_color"`` produce l'avviso "Don't know color".
-    Il nome si risolve chiedendo al motore CSS di GTK il valore corrente
-    del tema, cosi' il transcript segue il tema chiaro/scuro senza
-    duplicate.
+    Il nome si risolve facendo calcolare il colore al motore CSS di GTK
+    (classe ``lt-probe-*`` nel nostro foglio di stile), cosi' il
+    transcript segue il tema chiaro/scuro senza duplicati.
 
-    Il risultato si memoizza: ``lookup_color`` crea un ``Gtk.Label`` a
-    ogni chiamata e questa funzione viene usata dentro il ciclo di
-    aggiornamento del testo.
+    Non si usa ``Gtk.StyleContext.lookup_color``: e' deprecato e PyGObject
+    lo segnala a ogni chiamata (misurato: le due uniche
+    ``DeprecationWarning`` della suite venivano da qui). Non si usa
+    nemmeno ``Adw.StyleManager.get_accent_color_rgba``: restituisce
+    l'accent *di sistema* (misurato ``rgb(53,132,228)``), mentre il tema
+    risolve ``@accent_color`` in un valore diverso (``rgb(129,208,255)``
+    con il tema scuro predefinito) e i timestamp cambierebbero colore.
+
+    Il risultato si memoizza: la sonda crea un ``Gtk.Label`` a ogni
+    chiamata (non serve una finestra, misurato) e questa funzione viene
+    usata dentro il ciclo di aggiornamento del testo. La cache si svuota
+    in :func:`install`: un fallback calcolato prima dell'installazione
+    non deve restare al posto del colore vero.
     """
     cached = _CACHE.get(name)
     if cached is not None:
         return cached
     value = fallback
-    try:
-        probe = Gtk.Label()
-        ok, rgba = probe.get_style_context().lookup_color(name)
-        if ok and rgba is not None:
-            value = rgba.to_string()
-    except Exception:
-        pass
+    css_class = _PROBES.get(name)
+    if _INSTALLED and css_class is not None:
+        try:
+            probe = Gtk.Label()
+            probe.add_css_class(css_class)
+            value = probe.get_color().to_string()
+        except Exception:
+            value = fallback
     _CACHE[name] = value
     return value
 

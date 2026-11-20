@@ -18,8 +18,9 @@ Restrizioni reali della piattaforma (GNOME 50 / Wayland), gia' verificate:
   ottiene solo tramite un'estensione GNOME Shell che espone un'interfaccia
   D-Bus. Se l'estensione non e' installata la preferenza resta
   disponibile ma l'applicazione continua a funzionare;
-* il click-through non e' implementabile dal cliente: la preferenza
-  viene mostrata come non supportata;
+* il click-through non e' implementabile dal cliente: non esiste un
+  interruttore nel pannello preferenze per una funzione che non si puo'
+  attivare. Il limite e' documentato in docs/analisi-fattibilita.md;
 * lo sfondo sfocato non esiste: si usa la sola opacita'.
 """
 
@@ -1122,14 +1123,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.always_on_top_row.set_active(self.settings.always_on_top)
         self.always_on_top_row.connect("notify::active", self._on_always_on_top_changed)
         group.add(self.always_on_top_row)
-
-        self.click_through_row = Adw.SwitchRow(
-            title="Click-through",
-            subtitle="Non supportato su Wayland/GNOME 50",
-        )
-        self.click_through_row.set_sensitive(False)
-        self.click_through_row.set_active(False)
-        group.add(self.click_through_row)
         page.add(group)
 
         # -- inserimento --
@@ -1160,11 +1153,12 @@ class MainWindow(Adw.ApplicationWindow):
             title="Privacy",
             description="La registrazione audio è disattivata per impostazione "
             "predefinita. Se la attivi, l'audio viene scritto su disco in "
-            "chiaro: consumo spazio e impatti sulla privacy.",
+            "chiaro (WAV nella cartella dei dati): consumo spazio e impatti "
+            "sulla privacy.",
         )
         self.record_audio_row = Adw.SwitchRow(
             title="Registra l'audio",
-            subtitle="Scrive l'audio della lezione su disco",
+            subtitle="Salva la lezione in WAV nella cartella dei dati",
         )
         self.record_audio_row.set_active(self.settings.record_audio)
         self.record_audio_row.connect("notify::active", self._on_record_audio_changed)
@@ -1842,13 +1836,25 @@ class MainWindow(Adw.ApplicationWindow):
             pass
 
     def _on_record_audio_changed(self, row: Adw.SwitchRow, _pspec) -> None:
-        self.settings.record_audio = row.get_active()
-        if self.settings.record_audio:
-            self.toast_overlay.add_toast(
-                Adw.Toast.new(
-                    "Registrazione audio attiva: l'audio viene scritto su disco"
-                )
-            )
+        enabled = row.get_active()
+        self.settings.record_audio = enabled
+        # vale anche a sessione in corso: la pipeline apre o chiude il file
+        # adesso, cosi' il comportamento segue subito la casella invece di
+        # aspettare il prossimo "ascolta".
+        try:
+            self.pipeline.set_record_audio(enabled)
+        except Exception as exc:
+            self._on_error(f"Registrazione audio non disponibile: {exc}")
+            return
+        if enabled:
+            path = self.pipeline.recording_path
+            if path is not None:
+                detail = f"Audio salvato in {path}"
+            elif self.pipeline.is_listening:
+                detail = "Registrazione audio attiva: l'audio verrà scritto su disco"
+            else:
+                detail = "Registrazione audio attiva: parte con il prossimo ascolto"
+            self.toast_overlay.add_toast(Adw.Toast.new(detail))
 
     # -- scorciatoie --------------------------------------------------------
     def _install_shortcuts(self) -> None:

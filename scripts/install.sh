@@ -61,8 +61,17 @@ log "Aggiorno pip"
 log "Installo le dipendenze Python"
 "$VENV/bin/pip" install \
     "numpy>=2.0" "sounddevice>=0.5" "soxr>=0.4" \
-    "faster-whisper>=1.2" "huggingface-hub" \
-    "weasyprint>=60"
+    "faster-whisper>=1.2" "huggingface-hub"
+
+# WeasyPrint e' opzionale: serve solo a "Salva lezione" (export PDF). Metterlo
+# nel blocco fatale faceva fallire l'installazione **intera** — quindi anche
+# la trascrizione — per una funzione accessoria, e in contraddizione con
+# scripts/ensure-venv.sh, dove lo stesso pacchetto e' gia' best-effort. Qui si
+# fa lo stesso: se non si installa, l'app funziona e il tasto lo dice.
+log "Installo WeasyPrint (opzionale, per l'export PDF)"
+if ! "$VENV/bin/pip" install "weasyprint>=60"; then
+    warn "WeasyPrint non installato: l'export in PDF non sara' disponibile."
+fi
 
 log "Verifico l'ambiente"
 "$VENV/bin/python" - <<'PYEOF'
@@ -71,12 +80,18 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Gtk, Adw
 import numpy, sounddevice, soxr, faster_whisper
-import weasyprint
+# WeasyPrint e' opzionale: se manca, si segnala ma non si fallisce (il
+# blocco e' senza "set -e" effetto sul padre solo se l'exit e' 0).
+try:
+    import weasyprint
+    pdf = weasyprint.__version__
+except Exception:
+    pdf = "assente (export PDF non disponibile)"
 print(f"  GTK {Gtk.get_major_version()}.{Gtk.get_minor_version()}"
       f"  Adw {Adw.MAJOR_VERSION}.{Adw.MINOR_VERSION}"
       f"  numpy {numpy.__version__}"
       f"  faster-whisper {faster_whisper.__version__}"
-      f"  weasyprint {weasyprint.__version__}")
+      f"  weasyprint {pdf}")
 PYEOF
 
 # --- launcher e file .desktop ------------------------------------------------
@@ -160,6 +175,7 @@ for dir in "$ICON_TREE"/*/apps; do
     mkdir -p "$dest"
     cp "$dir"/*.png "$dest/" 2>/dev/null || true
 done
+mkdir -p "$ICON_BASE/scalable/apps"
 cp "$ICON_TREE/scalable/apps"/*.svg "$ICON_BASE/scalable/apps/" 2>/dev/null || true
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -f -t "$ICON_BASE" >/dev/null 2>&1 || true

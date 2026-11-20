@@ -43,11 +43,27 @@ try:
 except ImportError:  # pragma: no cover - dipende dall'ambiente
     np = None  # type: ignore[assignment]
 
-_MISSING_HINT = (
-    "Le librerie di riconoscimento vocale non sono installate. "
-    "Per trascrivere esegui scripts/ensure-venv.sh; nel frattempo "
-    "cronologia, ricerca, esportazione e correzioni funzionano."
+_MISSING_HINT_TAIL = (
+    "; nel frattempo cronologia, ricerca, esportazione e correzioni "
+    "funzionano."
 )
+
+
+def _missing_hint() -> str:
+    """Il rimedio, con il percorso giusto per *questo* layout.
+
+    Era ``scripts/ensure-venv.sh`` scritto a mano: valido solo se la cwd e'
+    la radice del clone. Lanciando l'app dall'icona (o da un RPM) quel
+    percorso non esiste e il rimedio mostrato non funziona. Il percorso
+    corretto lo conosce :func:`config.ensure_venv_hint`.
+    """
+    from . import config
+
+    return (
+        "Le librerie di riconoscimento vocale non sono installate. "
+        f"Per trascrivere esegui {config.ensure_venv_hint()}"
+        + _MISSING_HINT_TAIL
+    )
 
 
 def require_asr_libs() -> None:
@@ -60,7 +76,7 @@ def require_asr_libs() -> None:
     non ha davanti il traceback.
     """
     if np is None:
-        raise RuntimeError("numpy non e' installato. " + _MISSING_HINT)
+        raise RuntimeError("numpy non e' installato. " + _missing_hint())
 
 
 @dataclass
@@ -156,9 +172,11 @@ class TranscriptionEngine:
                 # Il venv dell'utente non e' pronto: il messaggio deve dire
                 # quale libreria manca e come rimediare, perche' "Caricamento
                 # del modello fallito" non e' azionabile.
+                from . import config
+
                 self._load_error = (
                     f"Librerie di riconoscimento vocale mancanti ({exc}). "
-                    "Esegui scripts/ensure-venv.sh per creare l'ambiente "
+                    f"Esegui {config.ensure_venv_hint()} per creare l'ambiente "
                     "Python dell'utente con faster-whisper e soxr."
                 )
                 self._model = None

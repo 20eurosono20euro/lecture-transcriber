@@ -69,12 +69,15 @@ def _require_audio_libs() -> None:
     ]
     if not missing:
         return
+    from . import config
+
     raise RuntimeError(
         "Librerie audio mancanti: "
         + ", ".join(missing)
         + ". Servono per l'acquisizione dal microfono; il resto "
-        "dell'applicazione funziona. Esegui scripts/ensure-venv.sh "
-        "(crea l'ambiente Python dell'utente con faster-whisper e soxr)."
+        "dell'applicazione funziona. Esegui "
+        + config.ensure_venv_hint()
+        + " (crea l'ambiente Python dell'utente con faster-whisper e soxr)."
     )
 
 

@@ -69,6 +69,12 @@ def read_wav(path: Path) -> np.ndarray:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="store_true",
+        help="stampa la versione ed esce",
+    )
     parser.add_argument("audio", nargs="?", help="file WAV da trascrivere")
     parser.add_argument(
         "--mic",
@@ -88,6 +94,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--quiet", action="store_true", help="solo il testo finale")
     args = parser.parse_args(argv)
+
+    if args.version:
+        from lecture_transcriber import __version__
+
+        print(f"lecture-transcriber {__version__}")
+        return 0
 
     if not args.audio and not args.mic:
         parser.error("serve un file WAV oppure --mic")

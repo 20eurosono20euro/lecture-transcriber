@@ -12,10 +12,12 @@ interessano. Il requisito e' una pagina pulita con un tap: WeasyPrint
 renderizza l'HTML preparato dal codice direttamente su ``~/Documents``,
 senza dialogo.
 
-La dipendenza ``python3-weasyprint`` e' pacchettizzata in Fedora 44, quindi
-entra nel GRUPPO 1 delle dipendenze (``Requires:`` nello spec, controllo
-in ``install.sh``). Se pero' l'app parte senza di essa — perche' il sistema
-non l'ha — il resto dell'applicazione funziona e il tasto segnala un errore
+La dipendenza WeasyPrint **non** e' pacchettizzata come
+``python3-weasyprint`` su Fedora 44 (verificato: il pacchetto non esiste),
+quindi non entra in ``Requires:`` nello spec. La installa
+``scripts/ensure-venv.sh`` nel virtualenv dell'utente, in modo
+best-effort: se non c'e' — rete assente, pip bloccato — il resto
+dell'applicazione funziona e il tasto "Salva lezione" segnala un errore
 chiaro invece di non aprire.
 """
 
@@ -110,8 +112,15 @@ def _import_weasyprint():
         from weasyprint import HTML  # noqa: PLC0415
         from weasyprint.text.ffi import pango  # noqa: F401, PLC0415
     except Exception:  # noqa: BLE001 - qualunque fallimento di import
+        # ``sudo dnf install python3-weasyprint`` non e' un rimedio: quel
+        # pacchetto non esiste su Fedora 44. Il rimedio vero e' lo script
+        # del progetto, che installa WeasyPrint nel virtualenv dell'utente.
+        from . import config
+
         raise WeasyPrintMissingError(
-            "Per salvare il PDF serve WeasyPrint: sudo dnf install python3-weasyprint"
+            "Per salvare il PDF serve WeasyPrint. Esegui "
+            f"{config.ensure_venv_hint()} per installarlo nell'ambiente "
+            "Python dell'utente."
         ) from None
     return HTML
 

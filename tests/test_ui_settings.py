@@ -165,7 +165,6 @@ class SettingsPopoverTest(unittest.TestCase):
             "auto_scroll_row",
             "compact_row",
             "always_on_top_row",
-            "click_through_row",
         ):
             row = getattr(self.window, name, None)
             self.assertIsNotNone(row, f"{name} non costruita")

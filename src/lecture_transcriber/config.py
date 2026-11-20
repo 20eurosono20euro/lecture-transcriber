@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
@@ -17,7 +18,7 @@ APP_ID = "it.lecturetranscriber.App"
 APP_NAME = "Lecture Transcriber"
 
 
-def _platform_home_dirs(platform: str, env: dict[str, str], home: Path):
+def _platform_home_dirs(platform: str, env: Mapping[str, str], home: Path):
     r"""Sceglie le cartelle base di dati, configurazione e cache per l'OS.
 
     Cross-platform (verificato contro le convenzioni ufficiali):
@@ -86,11 +87,52 @@ CACHE_DIR = Path(os.environ.get("LT_CACHE_DIR", XDG_CACHE / "lecture-transcriber
 MODEL_DIR = Path(os.environ.get("LT_MODEL_DIR", DATA_DIR / "models"))
 
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
-SESSIONS_FILE = DATA_DIR / "sessions.json"
+
+#: Sottocartella dei dati dove finiscono le registrazioni audio opzionali
+#: (``Settings.record_audio``). Sta sotto ``DATA_DIR`` perche' e' dato
+#: dell'utente come le trascrizioni, non cache.
+AUDIO_DIR = DATA_DIR / "audio"
 
 
-def _default_data_dir() -> Path:
-    return Path(os.environ.get("LT_DATA_DIR", DATA_DIR))
+def ensure_venv_hint() -> str:
+    """Percorso utilizzabile di ``ensure-venv.sh`` in *questo* layout.
+
+    Il rimedio che l'app mostra quando mancano le librerie di
+    riconoscimento vocale era un percorso relativo (``scripts/ensure-venv.sh``)
+    oppure, peggio, un percorso assoluto fisso
+    (``/usr/share/lecture-transcriber/scripts/ensure-venv.sh``): il primo
+    non e' valido per chi lancia l'app da un'icona (la cwd non e' il
+    clone), il secondo non esiste in un clone o in un'installazione per
+    utente. Qui si sceglie il primo candidato che **esiste davvero**:
+
+    * ``$LT_APP_DIR/scripts/ensure-venv.sh``, se la variabile e' impostata
+      (utile per installazioni spostate);
+    * ``/usr/share/lecture-transcriber/scripts/ensure-venv.sh`` (RPM);
+    * ``<radice del progetto>/scripts/ensure-venv.sh`` (clone, sia per
+      utente sia in sviluppo).
+
+    Se nessuno esiste (pacchetto installato in modo inusuale) si torna al
+    nome relativo: e' comunque il comando giusto da eseguire dal clone.
+    """
+    candidates: list[Path] = []
+    app_dir = os.environ.get("LT_APP_DIR")
+    if app_dir:
+        candidates.append(Path(app_dir) / "scripts" / "ensure-venv.sh")
+    candidates.append(
+        Path("/usr/share/lecture-transcriber/scripts/ensure-venv.sh")
+    )
+    # config.py sta in <radice>/src/lecture_transcriber/: parents[2] e' la
+    # radice del progetto quando si lavora da un clone.
+    candidates.append(
+        Path(__file__).resolve().parents[2] / "scripts" / "ensure-venv.sh"
+    )
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return str(candidate)
+        except OSError:
+            continue
+    return "scripts/ensure-venv.sh"
 
 
 @dataclass
@@ -119,10 +161,7 @@ class Settings:
     opacity: float = 0.85
     font_size: int = 14
     always_on_top: bool = True
-    click_through: bool = False
     auto_scroll: bool = True
-    x_pos: int | None = None
-    y_pos: int | None = None
     width: int = 420
     height: int = 520
     compact: bool = False
@@ -133,8 +172,9 @@ class Settings:
     insert_target: str = "auto"  # auto | libreoffice | atspi | clipboard
 
     # Privacy
-    record_audio: bool = False  # disattivata per impostazione predefinita
-    keep_audio: bool = False
+    #: Scrive l'audio della sessione in ``AUDIO_DIR/<sessione>.wav``.
+    #: Spenta per impostazione predefinita (brief §8).
+    record_audio: bool = False
 
     # Scorciatoie (identificatori logici -> tasti)
     shortcuts: dict[str, str] = field(
@@ -204,3 +244,5 @@ def save_settings(settings: Settings) -> None:
 def ensure_dirs() -> None:
     for d in (DATA_DIR, CONFIG_DIR, CACHE_DIR, MODEL_DIR):
         d.mkdir(parents=True, exist_ok=True)
+    # ``AUDIO_DIR`` si crea solo quando si registra (privacy: nessuna
+    # cartella audio vuota per chi non usa la funzione).
