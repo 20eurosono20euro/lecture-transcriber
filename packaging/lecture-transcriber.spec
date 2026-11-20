@@ -20,9 +20,11 @@ BuildArch:      noarch
 #
 # GRUPPO 1-bis — l'export in PDF ("Salva lezione") usa WeasyPrint, che su
 #   Fedora 44 NON e' pacchettizzato come python3-weasyprint (verificato:
-#   `rpm -q python3-weasyprint` -> non installato). Percio' nel percorso RPM
-#   lo installa il %post in un virtualenv, e qui restano solo le librerie
-#   di sistema che WeasyPrint carica a runtime. L'elenco non e' indovinato:
+#   `rpm -q python3-weasyprint` -> non installato). Percio' NON e' un
+#   Requires: lo installa `scripts/ensure-venv.sh` nel virtualenv
+#   dell'utente al primo avvio (in modo best-effort), e qui restano solo le
+#   librerie di sistema che WeasyPrint carica a runtime. L'elenco non e'
+#   indovinato:
 #   viene da /proc/<pid>/maps mentre WeasyPrint rende un PDF su questa
 #   macchina (pango, harfbuzz, fontconfig, freetype, glib/gobject,
 #   libtiff, libwebp, libjpeg-turbo, libpng, libxml2, libbrotli, expat,

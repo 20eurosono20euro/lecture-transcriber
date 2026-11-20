@@ -32,11 +32,11 @@ dagli script.
 ## Requisiti
 
 **Windows**
-- Python 3.11+ da [python.org](https://python.org) (spunta *Add to PATH*).
+- Python 3.14+ da [python.org](https://python.org) (spunta *Add to PATH*).
 - Microsoft Visual C++ Redistributable (richiesto da `ctranslate2`).
 
 **macOS**
-- Python 3.11+ (via [python.org](https://python.org) o Homebrew).
+- Python 3.14+ (via [python.org](https://python.org) o Homebrew).
 - Xcode Command Line Tools (`xcode-select --install`) per il toolchain.
 
 I **modelli Whisper (~1,6 GB)** non sono inclusi nel binario: si scaricano al
@@ -85,7 +85,7 @@ lecture-transcriber lezione.wav
 lecture-transcriber lezione.wav --course "Analisi II" --professor "Rossi" \
         --export out.md --format md_ts
 
-# dal microfono (Ctl+C per fermare)
+# dal microfono (Ctrl+C per fermare)
 lecture-transcriber --mic --course "Analisi II"
 
 # scegli un modello diverso (default: large-v3-turbo)
@@ -151,4 +151,4 @@ dist/lecture-transcriber` (o `spctl --add` dopo la firma).
 | `.exe` non parte (manca DLL) | VC++ Redistributable mancante | installa dal sito Microsoft |
 | Modello non trovato al primo uso | rete assente | scarica prima con `LT_MODEL_DIR=... python -c "from faster_whisper import WhisperModel; WhisperModel('large-v3-turbo')"` |
 | Binario mac "danneggiato" | quarantine | `xattr -dr com.apple.quarantine <file>` |
-| Microfono non rilevato | device index | usa `--micro` senza indice (default di sistema) |
+| Microfono non rilevato | device index | usa `--mic` senza indice (default di sistema) |

@@ -11,7 +11,7 @@
 # Prodotto: un singolo eseguibile (onefile) chiamato
 #   lecture-transcriber.exe  (Windows)
 #   lecture-transcriber      (macOS)
-# che trascrive un file audio e/o usa DETTA CLI senza interfaccia grafica.
+# che trascrive un file audio e/o usa la CLI senza interfaccia grafica.
 #
 # I modelli Whisper NON entrano nel bundle: pesano ~1,6 GB e si scaricano
 # al primo utilizzo nella cartella dati della piattaforma (vedi

@@ -12,7 +12,7 @@ cd ~/lecture-transcriber
 .venv/bin/python -m pytest tests/ -q
 ```
 
-**Risultato: 325 test e 17 subtest, tutti verdi.**
+**Risultato: 364 test e 17 subtest, tutti verdi.**
 
 | File | Copre |
 |---|---|
@@ -22,11 +22,14 @@ cd ~/lecture-transcriber
 | `test_insertion.py` | gate dell'inserimento: disarmato non scrive, focus cambiato non scrive, capacita' come dict di bool, **filtro EDITABLE/SHOWING di at-spi**, **lettura del titolo della finestra attiva** |
 | `test_pipeline_lazy.py` | **caricamento differito del modello**, richiesta di ascolto pendente durante il caricamento, **l'audio scartato viene detto a fine sessione** |
 | `test_audio.py` | cattura audio, buffering, gestione degli errori del dispositivo |
+| `test_recorder.py` | **la registrazione audio opzionale**: WAV PCM 16 bit mono a 16 kHz valido e rileggibile, cartella creata solo al primo uso, ampiezza conservata, campioni fuori scala *clippati* e non avvolti, NaN/Inf azzerati, `close()` idempotente. E il legame con la pipeline: la cattura alimenta il file, la pausa **non** lo fa crescere, un errore di scrittura avvisa senza fermare la trascrizione |
+| `test_pdf_export.py` | l'export PDF: HTML impaginato dai segmenti finali (timestamp, segnalibri, note), escaping dei caratteri speciali, metadati in intestazione, e il messaggio chiaro quando WeasyPrint manca (saltato se la libreria non e' installata) |
 | `test_shortcuts_gsettings.py` | percorso GSettings: parsing della lista, **validazione dei percorsi**, registrazione, rimozione, non toccare le scorciatoie dell'utente |
 | `test_app_shortcuts.py` | consegna della scorciatoia all'azione, GSettings preferito sul portal, interfaccia D-Bus coerente con `config.APP_ID` |
 | `test_ui_settings.py` | **il pannello preferenze: ogni gruppo costruito deve stare nella pagina, larghezza sufficiente per le etichette**, la consultazione discreta deve restare una modalita' e non una trappola (il commutatore Lettura/Appunti raggiungibile), registro audio spento per default. **Anche: il tasto del sempre-in-primo-piano** (esiste, e' raggiungibile in tutte e tre le modalita', torna spento e non tocca la preferenza se l'estensione manca), la **pillola di ritorno** e la **seconda capsula di stato** sul transcript, l'export SRT con **anteprima prima di scrivere** |
 | `test_transcript_view.py` | la **vista del transcript**: l'ipotesi provvisoria scritta *in place* in coda all'ultimo segmento (non come riga nuova), `text_for()` che esclude il provvisorio, niente newline orfano dopo una sequenza, `last_line()` col testo committato |
 | `test_study.py` (esteso) | robustezza del modulo di studio: **file JSON non UTF-8 ignorato invece di far sollevare il costruttore**, estrazione del termine con la testa del sintagma, spezzatura in frasi con le abbreviazioni, **campi vuoti che non fanno scivolare l'indice della risposta** |
+| `test_study_cli.py` | **il punto d'ingresso che mancava al modulo di studio** (`scripts/study_session.py`): elenco delle lezioni, materiale in Markdown su stdout e su file, JSON scritto nella cartella dati e rileggibile, **lezione inesistente e lezione vuota che escono con codice 1 invece di un traceback**, nessun argomento = errore d'uso, e il renderer che mostra tutte le sezioni con la risposta del quiz segnata |
 | `test_launch_without_asr.py` | **il lancio con un tap senza numpy/soxr/sounddevice/faster-whisper**: il pacchetto si importa, `pipeline.open()` sopravvive, "ascolta" segnala l'errore invece di morire o tacere. Gira in un sotto-processo con `MetaPathFinder` che blocca i moduli prima dell'import |
 
 ### Cinque bug reali trovati dai test e dalle verifiche dal vivo
@@ -98,6 +101,8 @@ sotto-processo con un `MetaPathFinder` che rende i moduli *genuinamente*
 assenti prima dell'import — nello stesso interprete i moduli veri sono
 gia' in `sys.modules` e il test non proverebbe niente. Verificato che la
 rete sia reale: rimettendo l'import in `app.py` 4 test su 6 falliscono.
+
+### Due bug nel modulo di studio
 
 8. **Un campo vuoto faceva scivolare l'indice della risposta del quiz.**
    `_split_fields` scartava i campi vuoti, quindi una riga con un'opzione
@@ -277,11 +282,11 @@ Atspi.TextGranularity.LINE)`, che restituisce un `Atspi.TextRange` con
   inserimento), che richiede una lezione vera.
 - **Precisione su parlato reale in aula**: richiede una registrazione vera.
 
-### 6.1 Verifiche specifiche sulle scorciatoie
+### 7.1 Verifiche specifiche sulle scorciatoie
 
 | Cosa | Come | Esito |
 |---|---|---|
-| Registrazione nel `media-keys` | `gsettings get ... custom-keybindings` | ✅ i 6 percorsi scritti |
+| Registrazione nel `media-keys` | `gsettings get ... custom-keybindings` | ✅ i 7 percorsi scritti |
 | Contenuto di una scorciatoia | `gsettings get ...custom-keybinding:<path> binding` | ✅ `<Ctrl><Super><Shift>A` |
 | Comando generato | `gsettings get ... command` | ✅ `gdbus call ... ActivateShortcut <id>` |
 | Interfaccia D-Bus esposta | `gdbus introspect --dest it.lecturetranscriber.App --object-path /it/lecturetranscriber/App` | ✅ `it.lecturetranscriber.App.ActivateShortcut(s)` |

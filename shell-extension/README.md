@@ -8,7 +8,7 @@ propria finestra sopra le altre: il protocollo espone solo
 `set_fullscreen`, `set_maximized`, `set_minimized`, `set_activatable`,
 `set_movable`, `set_resizable`.
 
-Su GNOME 4o inoltre **non esiste** il protocollo `wlr-layer-shell`
+Su GNOME 50 inoltre **non esiste** il protocollo `wlr-layer-shell`
 implementato da Mutter, quindi `gtk4-layer-shell` non funziona: non si può
 trasformare la finestra in un layer surface.
 

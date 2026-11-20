@@ -36,7 +36,7 @@ qualsiasi editor.
 ## Cosa fa
 
 - **Trascrive in tempo reale in italiano**, interamente sul computer, con
-  Whisper (`large-v3-turbo` int8, circa 2 GB di RAM). L'ipotesi provvisoria
+  Whisper (`large-v3-turbo` int8, 1,68 GiB di picco RSS misurati). L'ipotesi provvisoria
   esce in ~3 s e scorre *in place*, in coda all'ultimo segmento — nessun
   "salto di riga" fra ipotesi e testo finale.
 - **Finestra flottante** che si puo' spostare, ridimensionare, compattare e
@@ -160,16 +160,18 @@ src/lecture_transcriber/
     export.py      esportazione TXT, Markdown, SRT
     pdf_export.py  export in PDF ("Salva lezione", con WeasyPrint)
     study.py       riepilogo, concetti, definizioni, flashcard, dizionario
-    shortcuts.py         scorciatoie globali via portal GlobalShortcuts
-    shortcuts_gsettings.py  scorciatoie globali via GSettings media-keys
-    theme.py       foglio di stile e primitivi di design (capsule, togli)
+    shortcuts_gsettings.py  scorciatoie globali via GSettings media-keys (percorso primario)
+    shortcuts.py            scorciatoie globali via portal GlobalShortcuts (alternativa)
+    theme.py       foglio di stile e primitivi di design (capsule, stato, tipografia)
     ui.py          finestra flottante GTK4 + libadwaita
     app.py         orchestrazione: worker di cattura, ASR e inserimento
+    recorder.py    registrazione audio opzionale in WAV PCM 16 bit
+    __main__.py    punto d'ingresso a riga di comando
 shell-extension/  estensione GNOME per il sempre-in-primo-piano
-scripts/          installazione, benchmark, test end-to-end
+scripts/          installazione, benchmark, test end-to-end, materiale di studio
 tests/            test automatici
 docs/             analisi di fattibilita', installazione, test
-packaging/        specifica RPM per Fedora
+packaging/        specifica RPM, icone hicolor e build cross-platform (Windows/macOS)
 ```
 
 ---
@@ -185,6 +187,11 @@ packaging/        specifica RPM per Fedora
 
 # test end-to-end del motore ASR
 .venv/bin/python scripts/test_asr_italian.py
+
+# materiale di studio di una lezione gia' trascritta (riassunto,
+# concetti, definizioni, flashcard, quiz), senza interfaccia grafica
+.venv/bin/python scripts/study_session.py --list
+.venv/bin/python scripts/study_session.py 3 --format md
 ```
 
 Il progetto richiede **Python 3.14**: e' l'unico interprete con `gi`, `uno`

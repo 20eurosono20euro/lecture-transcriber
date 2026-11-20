@@ -286,14 +286,20 @@ velocissimo, ma è meno accurato di Whisper e non produce punteggiatura.** Non
 ```
 PipeWire 48k ──▶ mono ──▶ soxr 16k ──▶ VAD a inviluppo RMS
                                           │
-        silenzio ≥ 700 ms ────────────────┤
+                    ogni passo del segmento ─┐
                                           ▼
-                            ┌─────────────┴─────────────┐
-                            ▼                           ▼
-              Zipformer streaming (40 ms)      Whisper int8 (3 s)
-              testo provvisorio che scorre     testo definitivo
-              + rilevatore parole chiave       + punteggiatura + timestamp
+                            Whisper int8 large-v3-turbo
+                            ├─ final=False  ──▶ testo provvisorio (in place)
+                            └─ final=True   ──▶ testo definitivo
+                                                + punteggiatura + timestamp
 ```
+
+**Nessun motore streaming è nel percorso reale.** Il testo provvisorio lo
+produce lo **stesso** Whisper, richiamato con `final=False` sui primi secondi
+del segmento in corso (vedi `asr.py`, `Segmenter`/`WhisperEngine`); lo
+Zipformer2 era un candidato misurato e **scartato** (§3.1: WER 19,1 % contro
+7,0 %, nessuna punteggiatura, licenza CC-BY-SA incompatibile con la MIT). Lo
+schema con il transducer descrive l'alternativa studiata, non il codice.
 
 Il testo provvisorio **non** viene scritto su DB e non sostituisce mai il
 finale: il provvisorio è effimero, il finale è canonico. Il contesto viene
@@ -335,12 +341,12 @@ troncata (misurato: `convoluzionali` → `con evo`).
 |---|---|---|---|---|
 | `small` | 250 MB | ~1 GB | 0,08–0,13 | anteprima grezza, sconsigliato in italiano |
 | `medium` | 800 MB | ~1,5 GB | 0,15–0,27 | fallback a latenza minima |
-| **`large-v3-turbo`** | **850 MB** | **~2 GB** | **0,2–0,33** | **default: accuratezza quasi large-v3** |
+| **`large-v3-turbo`** | **1,6 GB** | **1,68 GiB (misurato)** | **0,2–0,33** | **default: accuratezza quasi large-v3** |
 | `large-v3` | 1,6 GB | ~3 GB | 0,4–0,73 | riprocessamento offline |
 
 `large-v3-turbo` e' il default: accuratezza vicina a large-v3 (~4–5 % WER su
-Common Voice it) ma 2–3 volte piu' veloce, e **con ~2 GB di RAM** sta
-comodo nei 7,8 GiB liberi. **Il modello e' gia' scaricato e caricato su
+Common Voice it) ma 2–3 volte piu' veloce, e **con 1,68 GiB di RSS misurati**
+sta comodo nei 7,8 GiB liberi. **Il modello e' gia' scaricato e caricato su
 questa macchina** (caricamento in 79,9 s, `lang: it` rilevato
 correttamente).
 
@@ -507,12 +513,14 @@ Il Flatpak e' tecnicamente possibile ma **scomodo per questo caso**:
 - le scorciatoie globali via GSettings funzionano, ma l'estensione GNOME
   richiede comunque un'installazione **fuori** dal Flatpak.
 
-Un **RPM** (in `packaging/`) installa l'app in `/usr/share` con
-l'interprete di sistema, cosi' `gi`/`uno`/`Atspi` funzionano senza sandbox e
-l'autostart e' un normale `.desktop`. Va notato che **RPM e' il formato
-naturale su Fedora** e che `sudo dnf install` richiede la password (quindi
-l'installazione utente via `scripts/install.sh` resta la via rapida per chi
-non vuole root).
+Un **RPM** (in `packaging/`) installa l'app in `/usr/share` e il suo
+launcher (`launch.sh`) usa il virtualenv dell'utente —
+`~/.local/share/lecture-transcriber/venv`, creato da `ensure-venv.sh` al
+primo avvio — ricadendo sull'interprete di sistema solo se il venv manca
+(cosi' `gi`/`uno`/`Atspi` funzionano senza sandbox anche nel caso minimale).
+Va notato che **RPM e' il formato naturale su Fedora** e che
+`sudo dnf install` richiede la password (quindi l'installazione utente via
+`scripts/install.sh` resta la via rapida per chi non vuole root).
 
 ---
 
@@ -521,9 +529,9 @@ non vuole root).
 | Funzionalita' | Stato |
 |---|---|
 | Trascrizione locale in italiano, senza cloud | ✅ garantito |
-| Finestra flottante, ridimensionabile, multi-monitor, posizione persistita | ✅ garantito |
+| Finestra flottante, ridimensionabile, multi-monitor, in angolo alto a destra | ✅ garantito (gravità `NORTH_EAST`; GTK4 non espone il posizionamento libero su Wayland) |
 | Semitrasparenza regolabile | ✅ garantito (`set_opacity`) |
-| Auto-start | ✅ garantito (`~/.config/autostart`) |
+| Auto-start | ❌ **non implementato**: nessuna unit `~/.config/autostart` viene installata (era dichiarato per errore) |
 | Scorciatoie globali | ✅ garantito (GSettings `media-keys`, verificato) |
 | Cronologia con ricerca, timestamp, segnalibri, note | ✅ garantito (SQLite) |
 | Salvataggio automatico, export TXT/MD/SRT | ✅ garantito |
@@ -591,7 +599,7 @@ aggiungere superficie di bug.
 | 5 | Cronologia consultabile + semitrasparenza | ✅ |
 | 6 | Inserimento controllato (UNO / at-spi / clipboard) | ✅ |
 | 7 | Salvataggio, export, scorciatoie, segnalibri | ✅ |
-| 8 | Funzioni avanzate: riepilogo, concetti, flashcard, dizionario | ✅ |
+| 8 | Funzioni avanzate: riepilogo, concetti, flashcard, dizionario | ⚠️ modulo completo e testato (`study.py`, 70 test) con **punto d'ingresso a riga di comando** (`scripts/study_session.py`); **non ancora collegato alla UI** |
 | 9 | Test di accuratezza, latenza, risorse, stabilita' | ✅ (vedi docs/test) |
 | 10 | Installazione, uso, disinstallazione su Fedora | ✅ docs/installazione.md |
 

@@ -50,13 +50,18 @@ Lo script:
 1. sceglie `python3.14` (l'unico con `gi`, `uno` e `Atspi`);
 2. crea `.venv` con `--system-site-packages`, così le librerie GTK di sistema
    restano visibili;
-3. installa `numpy`, `sounddevice`, `soxr`, `faster-whisper`,
-   `huggingface-hub`;
-4. scarica il modello `large-v3-turbo` (1,6 GB, una volta sola) in
+3. installa `numpy`, `sounddevice`, `soxr`, `faster-whisper` e
+   `huggingface-hub`, poi `weasyprint` in modo **best-effort**: serve solo
+   all'export PDF, quindi se non si installa l'app funziona lo stesso e il
+   tasto "Salva lezione" lo dice con un messaggio chiaro;
+4. scrive un `.pth` nel site-packages del virtualenv, così il pacchetto è
+   importabile da qualsiasi cartella senza esportare `PYTHONPATH`;
+5. installa le icone in `~/.local/share/icons/hicolor`, il file `.desktop`
+   in `~/.local/share/applications` e il launcher in `~/.local/bin`;
+6. scarica il modello `large-v3-turbo` (1,6 GB, una volta sola) in
    `~/.local/share/lecture-transcriber/models`;
-5. installa l'estensione GNOME in
-   `~/.local/share/gnome-shell/extensions/` (senza root) e il launcher in
-   `~/.local/bin`.
+7. installa l'estensione GNOME in
+   `~/.local/share/gnome-shell/extensions/` (senza root).
 
 Per saltare l'estensione: `./scripts/install.sh --no-ext`.
 
@@ -75,7 +80,7 @@ lecture-transcriber                                        # il launcher
 > (quello con `faster-whisper` e `soxr`) e il `python3` di sistema (quello
 > con `gi`/GTK). Se nessuno dei due ha le librerie, l'app si apre lo
 > stesso — cronologia, ricerca, esportazione funzionano — e dice a video
-> cosa manca. Un `.pth` nel site-packages del virtualev rende il pacchetto
+> cosa manca. Un `.pth` nel site-packages del virtualenv rende il pacchetto
 > importabile senza `PYTHONPATH`.
 
 ---
@@ -84,12 +89,23 @@ lecture-transcriber                                        # il launcher
 
 ```bash
 sudo dnf install rpm-build rpmdevtools
-rpmbuild -ta packaging/lecture-transcriber.spec
+rpmdev-setuptree
+spectool -g -R packaging/lecture-transcriber.spec   # scarica Source0 in ~/rpmbuild/SOURCES
+rpmbuild -ba packaging/lecture-transcriber.spec
 sudo dnf install ~/rpmbuild/RPMS/noarch/lecture-transcriber-*.rpm
 ```
 
-L'RPM installa l'app in `/usr/share/lecture-transcriber` e usa
-l'interprete di sistema: `gi`, `uno` e `Atspi` funzionano senza sandbox.
+> `rpmbuild -ta` **non** funziona con questo spec: `-ta` tratta l'argomento
+> come un *tarball*, mentre qui l'argomento è lo spec e il sorgente è
+> dichiarato da `Source0` (un URL su GitHub). Va scaricato in
+> `~/rpmbuild/SOURCES` con `spectool -g -R`, poi si costruisce con `-ba`.
+
+L'RPM installa l'app in `/usr/share/lecture-transcriber`. Il launcher
+(`/usr/share/lecture-transcriber/launch.sh`) usa il virtualenv
+dell'utente — `~/.local/share/lecture-transcriber/venv`, creato da
+`scripts/ensure-venv.sh` al primo avvio — e ricade sull'interprete di
+sistema solo se il venv non c'è (in quel caso `gi`, `uno` e `Atspi`
+funzionano comunque, manca solo il riconoscimento vocale).
 
 **Perche' non Flatpak**: il permesso del microfono, la scrittura dei modelli
 (1,6 GB) e soprattutto l'accesso al socket UNO di `soffice` sono fortemente
@@ -208,14 +224,8 @@ Le preferenze sono in `~/.config/lecture-transcriber/settings.json`:
 | `record_audio` | **default `false`**: la registrazione audio e' opzionale |
 
 **Il modello si scarica da solo** al primo avvio se manca; `install.sh` lo
-scarica già durante l'installazione. Per anticiparlo a mano:
-
-```bash
-~/.local/share/lecture-transcriber/bin/fetch-model.sh    # se presente
-```
-
-oppure direttamente (il percorso viene da `config.MODEL_DIR`, che è l'unica
-fonte di verità):
+scarica già durante l'installazione. Per anticiparlo a mano, direttamente
+(il percorso viene da `config.MODEL_DIR`, che è l'unica fonte di verità):
 
 ```bash
 MODEL_DIR=~/.local/share/lecture-transcriber/models
@@ -243,6 +253,7 @@ Predefinite (rimappabili da `settings.json`):
 | Attiva / disattiva l'inserimento | `toggle_insert` | `Ctrl+Super+Shift+I` |
 | Modalita' semitrasparente | `toggle_transparent` | `Ctrl+Super+Shift+T` |
 | Mostra / nascondi la finestra | `toggle_window` | `Ctrl+Super+Shift+V` |
+| Sempre in primo piano | `toggle_always_on_top` | `Ctrl+Super+Shift+P` |
 | Crea un segnalibro | `bookmark` | `Ctrl+Super+Shift+B` |
 | Torna al testo piu' recente | `jump_to_latest` | `Ctrl+Super+Shift+L` |
 
@@ -270,13 +281,10 @@ Mentre l'app gira, le scorciatoie sono visibili in **Impostazioni di sistema
 tasto si modifica la preferenza corrispondente in
 `~/.config/lecture-transcriber/settings.json` e si riavvia l'app. Le chiavi
 sono quelle della tabella qui sopra (`toggle_listen`, `toggle_insert`,
-`toggle_transparent`, `toggle_window`, `bookmark`, `jump_to_latest`).
+`toggle_transparent`, `toggle_window`, `toggle_always_on_top`, `bookmark`,
+`jump_to_latest`).
 
-In caso di conflitto con altre applicazioni, cambia il tasto in
-`settings.json`; se il `media-keys` non e' disponibile, l'app resta usabile
-con le scorciatoie locali della finestra.
-
-**Attenzione:** `gsd-media-keys` muove con SIGSEGV se trova un percorso non
+**Attenzione:** `gsd-media-keys` muore con SIGSEGV se trova un percorso non
 valido fra le scorciatoie personalizzate di GNOME — e in quel caso smettono
 di funzionare *tutte* le scorciatoie di GNOME, non solo quelle dell'app.
 L'app valida ogni percorso prima di scriverlo, quindi non dovrebbe mai
@@ -297,13 +305,14 @@ e rimuovere a mano qualsiasi voce che non sia un percorso che comincia con
 | Cosa | Dove |
 |---|---|
 | Modelli | `~/.local/share/lecture-transcriber/models` (`LT_MODEL_DIR` per spostarli) |
-| Trascrizioni | `~/.local/share/lecture-transcriber/sessions.db` (SQLite) |
-| Preferenze | `~/.config/lecture-transcriber/settings.json` |
-| Cache | `~/.cache/lecture-transcriber` |
+| Trascrizioni | `~/.local/share/lecture-transcriber/sessions.db` (SQLite, `LT_DATA_DIR`) |
+| Audio registrato, se attivo | `~/.local/share/lecture-transcriber/audio/*.wav` (`LT_DATA_DIR`) |
+| Preferenze | `~/.config/lecture-transcriber/settings.json` (`LT_CONFIG_DIR`) |
+| Cache | `~/.cache/lecture-transcriber` (`LT_CACHE_DIR`) |
 
-Entrambe le cartelle sono spostabili con le variabili d'ambiente
-`LT_DATA_DIR` e `LT_MODEL_DIR` (vedi `config.py`): servono a chi tiene i
-dati su un disco diverso.
+Tutte le cartelle sono spostabili con le variabili d'ambiente
+`LT_DATA_DIR`, `LT_CONFIG_DIR`, `LT_CACHE_DIR` e `LT_MODEL_DIR` (vedi
+`config.py`): servono a chi tiene i dati su un disco diverso.
 
 **Nessun dato lascia il computer.** La registrazione audio e' disattivata di
 default e la trascrizione funziona senza conservare l'audio originale.
@@ -311,12 +320,17 @@ default e la trascrizione funziona senza conservare l'audio originale.
 ### Disinstallazione
 
 ```bash
-# 2. rimuovi l'estensione GNOME
+# 1. rimuovi l'estensione GNOME
 gnome-extensions disable lecture-transcriber@localhost
 rm -rf ~/.local/share/gnome-shell/extensions/lecture-transcriber@localhost
 
-# 3. rimuovi il launcher e la voce di menu
+# 2. rimuovi il launcher e la voce di menu
 rm -f ~/.local/bin/lecture-transcriber ~/.local/share/applications/lecture-transcriber.desktop
+
+# 3. rimuovi le icone installate per l'utente
+rm -f ~/.local/share/icons/hicolor/*/apps/lecture-transcriber*.png \
+      ~/.local/share/icons/hicolor/scalable/apps/lecture-transcriber*.svg
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor >/dev/null 2>&1 || true
 
 # 4. rimuovi i dati (facoltativo)
 rm -rf ~/.local/share/lecture-transcriber ~/.config/lecture-transcriber ~/.cache/lecture-transcriber
@@ -369,5 +383,5 @@ wpctl status | grep -A3 Sources
 | `ModuleNotFoundError: No module named 'gi'` | stai usando `python3.13` | usa `.venv/bin/python` (3.14) |
 | La finestra non resta sopra | manca l'estensione GNOME | installa `shell-extension/` |
 | Nessun testo in Obsidian | manca `ydotool` + regola udev | vedi §5 |
-| Testo vuoto in un'aula rumorosa | soglia VAD troppo alta | abbassa `vad_silence_ms` o parla piu' vicino |
+| Il testo manca o si spezza in frammenti | il VAD chiude il segmento troppo tardi o troppo presto | regola `vad_silence_ms` (è la **durata del silenzio** che chiude un segmento, non una soglia di volume) o parla più vicino al microfono |
 | Il modello non si scarica | rete assente | scaricalo con `HF_HOME=...` a parte |
